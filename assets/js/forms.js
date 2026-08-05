@@ -275,6 +275,11 @@
 
     const body = `
       <form class="form" id="incomeEditForm" novalidate>
+        <label class="field">
+          <span class="field__label">Nama Pelanggan <span class="field__hint">boleh dikosongkan</span></span>
+          <input type="text" name="customerName" maxlength="60" autocomplete="off"
+                 placeholder="Misal: Bu Ani / Ojol / Meja 3" value="${U.escapeHtml(trx.customerName || '')}">
+        </label>
         ${hasItems ? `
           <div class="table-wrap">
             <table class="table table--detail">
@@ -296,6 +301,20 @@
         ` : amountField('editIncomeAmount', 'Jumlah Pemasukan', trx.total)}
         ${dateTimeFields(trx.date, trx.time)}
         ${methodChips(trx.method)}
+        <div class="cash-box-pay" data-cash-block${trx.method === 'tunai' ? '' : ' hidden'}>
+          <label class="field">
+            <span class="field__label">Uang yang diberikan <span class="field__hint">boleh dikosongkan</span></span>
+            <div class="amount-input">
+              <span class="amount-input__prefix">Rp</span>
+              <input type="text" id="editCash" inputmode="numeric" placeholder="0"
+                     value="${trx.cashGiven ? U.number(trx.cashGiven) : ''}">
+            </div>
+          </label>
+          <div class="change-row" data-change-row>
+            <span>${I.get('coins', 15)} Kembalian</span>
+            <b data-change>${trx.cashGiven ? U.rupiah(trx.change || 0) : '–'}</b>
+          </div>
+        </div>
         ${noteField(trx.note)}
       </form>`;
 
@@ -362,6 +381,43 @@
           amountInput = bindAmount(root, 'editIncomeAmount');
         }
 
+        /* --- Uang tunai & kembalian --- */
+        const cashInput = root.querySelector('#editCash');
+        const cashBlock = root.querySelector('[data-cash-block]');
+
+        const currentTotal = () => {
+          if (hasItems) {
+            const subtotal = U.sum(items.filter(it => it.qty > 0), it => it.qty * it.price);
+            return Math.max(0, subtotal - U.parseNumber(discountInput.value));
+          }
+          return U.parseNumber(amountInput.value);
+        };
+
+        const refreshChange = () => {
+          const given = U.parseNumber(cashInput.value);
+          const diff = given - currentTotal();
+          const el = root.querySelector('[data-change]');
+          const row = root.querySelector('[data-change-row]');
+          el.textContent = given > 0
+            ? (diff < 0 ? 'Kurang ' + U.rupiah(Math.abs(diff)) : U.rupiah(diff))
+            : '–';
+          row.classList.toggle('is-short', given > 0 && diff < 0);
+          row.classList.toggle('is-ok', given > 0 && diff >= 0);
+        };
+
+        U.attachThousand(cashInput);
+        cashInput.addEventListener('input', refreshChange);
+        if (discountInput) discountInput.addEventListener('input', refreshChange);
+        if (amountInput) amountInput.addEventListener('input', refreshChange);
+        refreshChange();
+
+        // Kotak uang tunai hanya relevan untuk pembayaran tunai.
+        method.chips.forEach(chip => chip.addEventListener('click', () => {
+          const isCash = chip.dataset.method === 'tunai';
+          cashBlock.hidden = !isCash;
+          if (!isCash) { cashInput.value = ''; refreshChange(); }
+        }));
+
         root.querySelector('[data-act=cancel]').addEventListener('click', () => handle.close());
 
         root.querySelector('[data-act=delete]').addEventListener('click', async () => {
@@ -382,10 +438,13 @@
 
         form.addEventListener('submit', e => {
           e.preventDefault();
+          const chosenMethod = method.get() || trx.method;
           const patch = {
             date: form.date.value || trx.date,
             time: form.time.value || trx.time,
-            method: method.get() || trx.method,
+            customerName: form.customerName.value,
+            method: chosenMethod,
+            cashGiven: chosenMethod === 'tunai' ? U.parseNumber(cashInput.value) : 0,
             note: form.note.value
           };
           if (hasItems) {
@@ -683,13 +742,15 @@
           <div class="receipt__logo">🍽️</div>
           <h3>${U.escapeHtml(profile.businessName || 'Usaha Makanan')}</h3>
           <p>${U.formatDateFull(trx.date)} • ${trx.time || ''}</p>
+          ${trx.customerName ? `<p class="receipt__customer">Pelanggan: <b>${U.escapeHtml(trx.customerName)}</b></p>` : ''}
         </div>
         <div class="receipt__divider"></div>
         ${(trx.items && trx.items.length) ? `
           <table class="receipt__table">
             ${trx.items.map(it => `
               <tr>
-                <td>${it.emoji || ''} ${U.escapeHtml(it.name)}<br><small>${it.qty} × ${U.rupiah(it.price)}</small></td>
+                <td>${it.emoji || ''} ${U.escapeHtml(it.name)}<br><small>${it.qty} × ${U.rupiah(it.price)}</small>
+                  ${it.note ? `<br><small>* ${U.escapeHtml(it.note)}</small>` : ''}</td>
                 <td class="ta-r">${U.rupiah(it.qty * it.price)}</td>
               </tr>`).join('')}
           </table>
@@ -702,6 +763,11 @@
         ` : `<table class="receipt__table"><tr class="receipt__grand"><td>TOTAL</td><td class="ta-r">${U.rupiah(trx.total)}</td></tr></table>`}
         <div class="receipt__divider"></div>
         <p class="receipt__meta">Pembayaran: ${method ? method.emoji + ' ' + method.name : U.escapeHtml(trx.method || '-')}</p>
+        ${trx.cashGiven ? `
+          <table class="receipt__table">
+            <tr><td>Uang diberikan</td><td class="ta-r">${U.rupiah(trx.cashGiven)}</td></tr>
+            <tr><td><b>Kembalian</b></td><td class="ta-r"><b>${U.rupiah(trx.change || 0)}</b></td></tr>
+          </table>` : ''}
         ${trx.note ? `<p class="receipt__meta">Catatan: ${U.escapeHtml(trx.note)}</p>` : ''}
         <p class="receipt__thanks">Terima kasih 🙏<br>Selamat menikmati!</p>
       </div>`;

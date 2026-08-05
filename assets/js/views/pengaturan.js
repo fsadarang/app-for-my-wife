@@ -94,12 +94,19 @@
         <div class="callout callout--info">
           <span class="callout__emoji">🔒</span>
           <div>
-            <h3>Datamu tersimpan di perangkat ini saja</h3>
-            <p>Tidak dikirim ke mana pun. Karena itu, <b>rutinlah membuat cadangan</b> — apalagi sebelum ganti HP atau membersihkan data browser.</p>
+            <h3>Datamu tersimpan di HP ini saja</h3>
+            <p>Tidak dikirim ke mana pun, jadi <b>tidak ikut berpindah sendiri</b> saat aplikasi dibuka di HP lain.
+            Untuk memindahkannya, pakai <b>Pindah ke HP Lain</b> di bawah. Rutin simpan cadangan, apalagi sebelum ganti HP
+            atau membersihkan data browser.</p>
           </div>
         </div>
 
         <div class="setting-grid">
+          <button type="button" class="action-tile action-tile--wide" data-act="transfer">
+            <span class="action-tile__icon action-tile__icon--violet">${I.get('copy', 22)}</span>
+            <span class="action-tile__title">Pindah ke HP Lain</span>
+            <span class="action-tile__text">Salin semua data jadi teks, kirim ke diri sendiri lewat WhatsApp, lalu tempel di HP baru</span>
+          </button>
           <button type="button" class="action-tile" data-act="backup">
             <span class="action-tile__icon action-tile__icon--blue">${I.get('download', 22)}</span>
             <span class="action-tile__title">Simpan Cadangan</span>
@@ -112,8 +119,8 @@
           </button>
           <button type="button" class="action-tile" data-act="csv">
             <span class="action-tile__icon action-tile__icon--amber">${I.get('receipt', 22)}</span>
-            <span class="action-tile__title">Ekspor Semua ke CSV</span>
-            <span class="action-tile__text">Untuk dibuka di Excel / Google Sheets</span>
+            <span class="action-tile__title">Ekspor Semua ke Excel</span>
+            <span class="action-tile__text">Berisi sheet Rincian Item, satu baris tiap item</span>
           </button>
           <button type="button" class="action-tile" data-act="demo">
             <span class="action-tile__icon action-tile__icon--violet">${I.get('sparkle', 22)}</span>
@@ -257,19 +264,16 @@
     root.querySelector('[data-act=csv]').addEventListener('click', () => {
       const st = S.get();
       if (!st.transactions.length) { UI.toast('Belum ada transaksi untuk diekspor', 'warn'); return; }
-      const rows = [['Tanggal', 'Jam', 'Jenis', 'Keterangan', 'Kategori/Menu', 'Metode', 'Jumlah']];
-      S.sortedDesc(st.transactions).slice().reverse().forEach(t => {
-        const isIncome = t.type === 'income';
-        rows.push([
-          t.date, t.time || '', isIncome ? 'Pemasukan' : 'Pengeluaran', t.note || '',
-          isIncome ? (t.items || []).map(it => `${it.name} x${it.qty}`).join(', ') : S.getCategory(t.categoryId).name,
-          (S.PAYMENT_METHODS.find(m => m.id === t.method) || {}).name || t.method || '',
-          (isIncome ? '' : '-') + t.total
-        ]);
+      const list = S.sortedDesc(st.transactions).reverse();
+      global.Exporter.saveWorkbook(list, {
+        from: S.firstDate(), to: U.today(),
+        title: st.profile.businessName || '',
+        rangeLabel: 'Seluruh catatan',
+        filename: `semua-transaksi-${U.today()}`
       });
-      U.download(`semua-transaksi-${U.today()}.csv`, '﻿' + U.toCSV(rows), 'text/csv');
-      UI.toast('Seluruh transaksi diekspor ke CSV', 'success');
     });
+
+    root.querySelector('[data-act=transfer]').addEventListener('click', () => transferModal(root));
 
     root.querySelector('[data-act=demo]').addEventListener('click', async () => {
       if (S.hasDemoData()) {
@@ -322,5 +326,128 @@
     });
   }
 
+  /* ---------- Pindah data antar HP ---------- */
+
+  /**
+   * Sinkronisasi otomatis butuh server, sedangkan aplikasi ini murni
+   * berjalan di dalam browser. Jalan tengahnya: seluruh data disalin
+   * menjadi teks yang bisa dikirim ke diri sendiri (WhatsApp, email,
+   * catatan), lalu ditempel di HP tujuan.
+   */
+  function transferModal(root) {
+    const st = S.get();
+    const payload = S.exportJSON();
+    const sizeKB = (payload.length / 1024).toFixed(1);
+
+    UI.modal({
+      title: 'Pindah ke HP Lain',
+      subtitle: 'Memindahkan seluruh catatan tanpa kehilangan data',
+      icon: 'copy',
+      size: 'md',
+      body: `
+        <div class="transfer">
+          <div class="seg seg--wide seg--tabs" role="tablist">
+            <button type="button" class="seg__btn is-active" data-tab="out" role="tab">
+              ${I.get('upload', 16)} Kirim dari HP ini
+            </button>
+            <button type="button" class="seg__btn" data-tab="in" role="tab">
+              ${I.get('download', 16)} Terima di HP ini
+            </button>
+          </div>
+
+          <section data-panel="out">
+            <ol class="guide">
+              <li>Tekan <b>Salin Semua Data</b> di bawah.</li>
+              <li>Buka WhatsApp, kirim ke <b>nomor sendiri</b> (Pesan Tersimpan), lalu tempel dan kirim.</li>
+              <li>Buka pesan itu di HP tujuan, salin teksnya.</li>
+              <li>Di HP tujuan, buka aplikasi ini → Pengaturan → Pindah ke HP Lain → <b>Terima di HP ini</b>.</li>
+            </ol>
+            <div class="transfer__stat">
+              ${I.get('package', 16)} ${U.number(st.transactions.length)} transaksi •
+              ${st.products.length} menu • ${sizeKB} KB
+            </div>
+            <textarea class="transfer__box" id="transferOut" readonly rows="4">${U.escapeHtml(payload)}</textarea>
+            <div class="transfer__actions">
+              <button type="button" class="btn btn--primary btn--block" data-act="copy">
+                ${I.get('copy', 18)} Salin Semua Data
+              </button>
+            </div>
+            <p class="form__hint form__hint--muted">${I.get('info', 15)}
+              Kalau teksnya terlalu panjang untuk dikirim, pakai <b>Simpan Cadangan</b> dan kirim berkasnya sebagai lampiran.</p>
+          </section>
+
+          <section data-panel="in" hidden>
+            <p class="form__hint">${I.get('alert', 16)}
+              Data yang ada di HP ini akan <b>digantikan</b> oleh data yang ditempel. Pastikan HP ini memang HP tujuan.</p>
+            <label class="field">
+              <span class="field__label">Tempel data dari HP lama di sini</span>
+              <textarea class="transfer__box" id="transferIn" rows="5" placeholder="Tempel (paste) teks panjang yang tadi disalin..."></textarea>
+            </label>
+            <button type="button" class="btn btn--primary btn--block" data-act="apply">
+              ${I.get('check', 18)} Pindahkan Data ke HP Ini
+            </button>
+          </section>
+        </div>`,
+      footer: `<span class="spacer"></span>
+        <button type="button" class="btn btn--ghost" data-act="close">Tutup</button>`,
+      onMount: h => {
+        const el = h.root;
+        el.querySelector('[data-act=close]').addEventListener('click', () => h.close());
+
+        el.querySelectorAll('[data-tab]').forEach(btn => btn.addEventListener('click', () => {
+          const tab = btn.dataset.tab;
+          el.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('is-active', b === btn));
+          el.querySelector('[data-panel=out]').hidden = tab !== 'out';
+          el.querySelector('[data-panel=in]').hidden = tab !== 'in';
+        }));
+
+        el.querySelector('[data-act=copy]').addEventListener('click', async () => {
+          const box = el.querySelector('#transferOut');
+          let copied = false;
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              await navigator.clipboard.writeText(box.value);
+              copied = true;
+            }
+          } catch (e) { /* izin clipboard ditolak, pakai cara lama */ }
+          if (!copied) {
+            box.removeAttribute('readonly');
+            box.focus();
+            box.select();
+            try { copied = document.execCommand('copy'); } catch (e) { copied = false; }
+            box.setAttribute('readonly', 'readonly');
+          }
+          UI.toast(copied
+            ? 'Data tersalin. Sekarang tempel di WhatsApp dan kirim ke nomor sendiri.'
+            : 'Tidak bisa menyalin otomatis. Tekan lama di kotak teks, pilih semua, lalu salin.',
+            copied ? 'success' : 'warn', 6000);
+        });
+
+        el.querySelector('[data-act=apply]').addEventListener('click', async () => {
+          const text = el.querySelector('#transferIn').value.trim();
+          if (!text) { UI.toast('Tempel dulu data dari HP lama', 'warn'); return; }
+          const ok = await UI.confirm({
+            title: 'Ganti data di HP ini?',
+            message: 'Seluruh catatan yang ada di HP ini akan digantikan oleh data yang kamu tempel. Tindakan ini tidak bisa dibatalkan.',
+            danger: true, confirmText: 'Ya, pindahkan'
+          });
+          if (!ok) return;
+          try {
+            S.importJSON(text);
+            UI.applyTheme(S.get().settings.theme);
+            h.close();
+            UI.toast('Data berhasil dipindahkan ke HP ini 🎉', 'success', 6000);
+            global.App.refreshShell();
+            render(root);
+          } catch (err) {
+            console.error(err);
+            UI.toast('Teksnya tidak terbaca. Pastikan tersalin lengkap dari awal "{" sampai akhir "}".', 'error', 7000);
+          }
+        });
+      }
+    });
+  }
+
   global.Views.pengaturan = render;
+  global.Views.transferModal = transferModal;
 })(window);

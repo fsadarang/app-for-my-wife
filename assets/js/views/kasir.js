@@ -7,13 +7,15 @@
   const U = global.Utils, I = global.Icons, S = global.Store, UI = global.UI;
   global.Views = global.Views || {};
 
-  // Keranjang bertahan selama sesi, jadi tidak hilang saat pindah halaman.
+  // Pesanan bertahan selama sesi, jadi tidak hilang saat pindah halaman.
   let cart = [];
   let search = '';
   let activeGroup = 'Semua';
   let payMethod = 'tunai';
   let discount = 0;
-  let saleDate = null; // null = hari ini
+  let saleDate = null;      // null = hari ini
+  let customerName = '';
+  let cashGiven = 0;        // uang yang diberikan pelanggan (tunai)
 
   function cartTotalQty() { return U.sum(cart, it => it.qty); }
   function cartSubtotal() { return U.sum(cart, it => it.qty * it.price); }
@@ -44,12 +46,19 @@
         <aside class="pos__cart" data-cart-panel>
           <div class="cart">
             <header class="cart__head">
-              <h2 class="cart__title">${I.get('cart', 18)} Pesanan</h2>
+              <h2 class="cart__title">${I.get('users', 18)} Pesanan Pelanggan</h2>
               <div class="cart__head-actions">
                 <span class="cart__count" data-cart-count>0 item</span>
                 <button type="button" class="icon-btn cart__collapse" data-act="close-cart" aria-label="Tutup pesanan">${I.get('chevronDown', 18)}</button>
               </div>
             </header>
+            <div class="cart__customer">
+              <label class="field">
+                <span class="field__label">Nama Pelanggan <span class="field__hint">boleh dikosongkan</span></span>
+                <input type="text" id="cartCustomer" maxlength="60" autocomplete="off"
+                       placeholder="Misal: Bu Ani / Ojol / Meja 3" value="${U.escapeHtml(customerName)}">
+              </label>
+            </div>
             <div class="cart__items" data-cart-items></div>
             <div class="cart__foot" data-cart-foot></div>
           </div>
@@ -82,10 +91,14 @@
       global.Forms.productModal(null, () => render(root));
     });
 
-    /* --- Panel keranjang (mobile) --- */
+    /* --- Panel pesanan (mobile) --- */
     const panel = root.querySelector('[data-cart-panel]');
     root.querySelector('[data-act=open-cart]').addEventListener('click', () => panel.classList.add('is-open'));
     root.querySelector('[data-act=close-cart]').addEventListener('click', () => panel.classList.remove('is-open'));
+
+    /* --- Nama pelanggan --- */
+    const custInput = root.querySelector('#cartCustomer');
+    custInput.addEventListener('input', () => { customerName = custInput.value; });
 
     renderGroups(root, products);
     renderGrid(root);
@@ -222,16 +235,26 @@
         <div class="cart-item__body">
           <p class="cart-item__name">${U.escapeHtml(it.name)}</p>
           <p class="cart-item__price">${U.rupiah(it.price)} × ${it.qty} = <b>${U.rupiah(it.price * it.qty)}</b></p>
+          ${it.note ? `<p class="cart-item__note">${I.get('note', 12)} ${U.escapeHtml(it.note)}</p>` : ''}
         </div>
-        <div class="stepper">
-          <button type="button" class="stepper__btn" data-dec aria-label="Kurangi ${U.escapeHtml(it.name)}">${I.get('minus', 15)}</button>
-          <span class="stepper__val">${it.qty}</span>
-          <button type="button" class="stepper__btn" data-inc aria-label="Tambah ${U.escapeHtml(it.name)}">${I.get('plus', 15)}</button>
+        <div class="cart-item__controls">
+          <div class="stepper">
+            <button type="button" class="stepper__btn" data-dec aria-label="Kurangi ${U.escapeHtml(it.name)}">${I.get('minus', 15)}</button>
+            <span class="stepper__val">${it.qty}</span>
+            <button type="button" class="stepper__btn" data-inc aria-label="Tambah ${U.escapeHtml(it.name)}">${I.get('plus', 15)}</button>
+          </div>
+          <div class="cart-item__tools">
+            <button type="button" class="cart-item__note-btn${it.note ? ' is-set' : ''}" data-note
+                    aria-label="Catatan untuk ${U.escapeHtml(it.name)}">${I.get('note', 14)} Catatan</button>
+            <button type="button" class="icon-btn cart-item__del" data-del aria-label="Hapus ${U.escapeHtml(it.name)}">${I.get('trash', 15)}</button>
+          </div>
         </div>
-        <button type="button" class="icon-btn cart-item__del" data-del aria-label="Hapus ${U.escapeHtml(it.name)}">${I.get('trash', 16)}</button>
       </div>`).join('');
 
     const isToday = saleDate === U.today();
+    const isCash = payMethod === 'tunai';
+    const change = cashGiven > 0 ? cashGiven - total : 0;
+
     footHost.innerHTML = `
       <div class="cart__summary">
         <div class="cart__row"><span>Subtotal</span><b>${U.rupiah(subtotal)}</b></div>
@@ -258,6 +281,27 @@
         </div>
       </div>
 
+      ${isCash ? `
+        <div class="cash-box-pay" data-cash-block>
+          <label class="field">
+            <span class="field__label">Uang yang diberikan <span class="field__hint">boleh dikosongkan</span></span>
+            <div class="amount-input">
+              <span class="amount-input__prefix">Rp</span>
+              <input type="text" id="cartCash" inputmode="numeric" placeholder="0" value="${cashGiven ? U.number(cashGiven) : ''}">
+            </div>
+          </label>
+          <div class="quick-amounts" data-cash-quick>
+            ${cashSuggestions(total).map(v => `<button type="button" class="chip chip--quick" data-cash="${v}">${U.rupiah(v)}</button>`).join('')}
+            <button type="button" class="chip chip--quick chip--clear" data-cash="0">${I.get('x', 14)} Hapus</button>
+          </div>
+          <div class="change-row ${cashGiven > 0 && change < 0 ? 'is-short' : (change > 0 ? 'is-ok' : '')}" data-change-row>
+            <span>${I.get('coins', 15)} Kembalian</span>
+            <b data-change>${cashGiven > 0
+              ? (change < 0 ? 'Kurang ' + U.rupiah(Math.abs(change)) : U.rupiah(change))
+              : '–'}</b>
+          </div>
+        </div>` : ''}
+
       <div class="cart__date">
         <button type="button" class="cart__date-toggle" data-act="toggle-date">
           ${I.get('calendar', 15)} ${isToday ? 'Hari ini' : U.formatDate(saleDate)}
@@ -273,7 +317,7 @@
         </button>
       </div>`;
 
-    /* --- Interaksi keranjang --- */
+    /* --- Interaksi pesanan --- */
     itemsHost.querySelectorAll('.cart-item').forEach(node => {
       const i = Number(node.dataset.i);
       node.querySelector('[data-inc]').addEventListener('click', () => { cart[i].qty += 1; renderCart(root); renderGrid(root); });
@@ -285,26 +329,65 @@
       node.querySelector('[data-del]').addEventListener('click', () => {
         cart.splice(i, 1); renderCart(root); renderGrid(root);
       });
+      node.querySelector('[data-note]').addEventListener('click', () => itemNoteModal(root, i));
     });
+
+    /** Perbarui angka total tanpa menggambar ulang, supaya fokus ketikan tidak lompat */
+    const refreshTotals = () => {
+      const totalNow = cartTotal();
+      const changeNow = cashGiven > 0 ? cashGiven - totalNow : 0;
+      footHost.querySelector('.cart__row--total b').textContent = U.rupiah(totalNow);
+      footHost.querySelector('[data-act=checkout]').innerHTML =
+        `${I.get('check', 20)} Simpan Penjualan • ${U.rupiah(totalNow)}`;
+      const barTotal = root.querySelector('[data-bar-total]');
+      if (barTotal) barTotal.textContent = U.rupiah(totalNow);
+
+      const changeEl = footHost.querySelector('[data-change]');
+      if (changeEl) {
+        changeEl.textContent = cashGiven > 0
+          ? (changeNow < 0 ? 'Kurang ' + U.rupiah(Math.abs(changeNow)) : U.rupiah(changeNow))
+          : '–';
+        const row = footHost.querySelector('[data-change-row]');
+        row.classList.toggle('is-short', cashGiven > 0 && changeNow < 0);
+        row.classList.toggle('is-ok', cashGiven > 0 && changeNow >= 0);
+      }
+    };
 
     const discInput = footHost.querySelector('#cartDiscount');
     U.attachThousand(discInput);
     discInput.addEventListener('input', U.debounce(() => {
-      const v = U.parseNumber(discInput.value);
-      discount = Math.min(v, cartSubtotal());
-      const totalNow = cartTotal();
-      footHost.querySelector('.cart__row--total b').textContent = U.rupiah(totalNow);
-      footHost.querySelector('[data-act=checkout]').innerHTML =
-        `${I.get('check', 20)} Simpan Penjualan • ${U.rupiah(totalNow)}`;
-      root.querySelector('[data-bar-total]').textContent = U.rupiah(totalNow);
+      discount = Math.min(U.parseNumber(discInput.value), cartSubtotal());
+      refreshTotals();
     }, 200));
 
+    // Mengganti metode bayar menampilkan/menyembunyikan kotak uang tunai,
+    // jadi bagian bawah digambar ulang.
     footHost.querySelectorAll('[data-method]').forEach(chip => {
       chip.addEventListener('click', () => {
-        payMethod = chip.dataset.method;
-        footHost.querySelectorAll('[data-method]').forEach(c => c.classList.toggle('is-active', c === chip));
+        const next = chip.dataset.method;
+        if (next === payMethod) return;
+        const wasCash = payMethod === 'tunai';
+        payMethod = next;
+        if (wasCash && next !== 'tunai') cashGiven = 0;
+        renderCart(root);
       });
     });
+
+    const cashInput = footHost.querySelector('#cartCash');
+    if (cashInput) {
+      U.attachThousand(cashInput);
+      cashInput.addEventListener('input', U.debounce(() => {
+        cashGiven = U.parseNumber(cashInput.value);
+        refreshTotals();
+      }, 150));
+      footHost.querySelectorAll('[data-cash]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          cashGiven = Number(btn.dataset.cash) || 0;
+          cashInput.value = cashGiven ? U.number(cashGiven) : '';
+          refreshTotals();
+        });
+      });
+    }
 
     const dateInput = footHost.querySelector('[data-date-input]');
     footHost.querySelector('[data-act=toggle-date]').addEventListener('click', () => {
@@ -323,25 +406,89 @@
         danger: true, confirmText: 'Kosongkan'
       });
       if (!ok) return;
-      cart = []; discount = 0;
+      cart = []; discount = 0; cashGiven = 0; customerName = '';
+      const custInput = root.querySelector('#cartCustomer');
+      if (custInput) custInput.value = '';
       renderCart(root); renderGrid(root);
     });
 
     footHost.querySelector('[data-act=checkout]').addEventListener('click', () => checkout(root));
   }
 
+  /** Pecahan uang yang masuk akal untuk membayar sejumlah total */
+  function cashSuggestions(total) {
+    if (total <= 0) return [];
+    const out = [total];
+    [1000, 2000, 5000, 10000, 20000, 50000, 100000].forEach(step => {
+      const up = Math.ceil(total / step) * step;
+      if (up > total && out.indexOf(up) < 0) out.push(up);
+    });
+    return out.sort((a, b) => a - b).slice(0, 4);
+  }
+
+  /** Catatan khusus untuk satu item, misalnya "tidak pedas" */
+  function itemNoteModal(root, index) {
+    const item = cart[index];
+    if (!item) return;
+    UI.modal({
+      title: 'Catatan Item',
+      subtitle: item.name,
+      icon: 'note',
+      size: 'sm',
+      body: `
+        <form class="form" id="itemNoteForm">
+          <label class="field">
+            <span class="field__label">Permintaan khusus pelanggan</span>
+            <input type="text" name="note" maxlength="80" data-autofocus autocomplete="off"
+                   placeholder="Misal: tidak pedas, bungkus terpisah" value="${U.escapeHtml(item.note || '')}">
+          </label>
+        </form>`,
+      footer: `<span class="spacer"></span>
+        <button type="button" class="btn btn--ghost" data-act="cancel">Batal</button>
+        <button type="submit" form="itemNoteForm" class="btn btn--primary">${I.get('check', 18)} Simpan</button>`,
+      onMount: h => {
+        h.root.querySelector('[data-act=cancel]').addEventListener('click', () => h.close());
+        h.root.querySelector('#itemNoteForm').addEventListener('submit', e => {
+          e.preventDefault();
+          cart[index].note = e.target.note.value.trim();
+          h.close();
+          renderCart(root);
+        });
+      }
+    });
+  }
+
   function checkout(root) {
     if (!cart.length) return;
+    const total = cartTotal();
+
+    // Uang tunai yang kurang dari total hampir pasti salah ketik.
+    if (payMethod === 'tunai' && cashGiven > 0 && cashGiven < total) {
+      UI.toast(`Uang yang diberikan kurang ${U.rupiah(total - cashGiven)} dari total belanja`, 'warn', 5000);
+      return;
+    }
+
     const trx = S.addIncome({
       items: cart,
+      customerName: customerName,
       discount: discount,
       date: saleDate || U.today(),
       time: U.nowTime(),
-      method: payMethod
+      method: payMethod,
+      cashGiven: payMethod === 'tunai' ? cashGiven : 0
     });
-    const total = trx.total;
-    cart = []; discount = 0; saleDate = U.today();
+
+    const savedChange = trx.change;
+    const savedName = trx.customerName;
+    cart = []; discount = 0; saleDate = U.today(); customerName = ''; cashGiven = 0;
+    const custInput = root.querySelector('#cartCustomer');
+    if (custInput) custInput.value = '';
     renderCart(root); renderGrid(root);
+
+    // Kembalian ditampilkan besar supaya mudah dibaca saat melayani pembeli.
+    if (savedChange > 0) {
+      UI.toast(`Kembalian ${U.rupiah(savedChange)}${savedName ? ' untuk ' + savedName : ''}`, 'info', 8000);
+    }
 
     UI.toast(`Penjualan ${U.rupiah(total)} tersimpan 🎉`, 'success', 6000, {
       label: 'Lihat Struk',

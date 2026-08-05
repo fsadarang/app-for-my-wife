@@ -74,7 +74,7 @@
           <p class="page-sub">Semua catatan uang masuk dan keluar. Ketuk salah satu untuk mengubah.</p>
         </div>
         <div class="page-head__actions">
-          <button type="button" class="btn btn--soft" data-act="export">${I.get('download', 18)} Ekspor CSV</button>
+          <button type="button" class="btn btn--soft" data-act="export">${I.get('download', 18)} Ekspor Excel</button>
           <button type="button" class="btn btn--expense" data-act="expense">${I.get('plus', 18)} Pengeluaran</button>
           <button type="button" class="btn btn--income" data-act="income">${I.get('plus', 18)} Pemasukan</button>
         </div>
@@ -141,12 +141,19 @@
       <section class="trx-groups">
         ${visible.length ? Array.from(byDate.keys()).map(date => {
           const rows = byDate.get(date);
-          const dIn = U.sum(rows.filter(t => t.type === 'income'), t => t.total);
+          const dayIncomes = rows.filter(t => t.type === 'income');
+          const dIn = U.sum(dayIncomes, t => t.total);
           const dOut = U.sum(rows.filter(t => t.type === 'expense'), t => t.total);
+          const dPorsi = U.sum(dayIncomes, t => U.sum(t.items || [], it => it.qty));
           return `
             <div class="trx-group">
               <div class="trx-group__head">
-                <h3>${U.formatDateRelative(date)}</h3>
+                <div class="trx-group__title">
+                  <h3>${U.formatDateRelative(date)}</h3>
+                  ${dayIncomes.length ? `<span class="trx-group__customers">
+                    ${I.get('users', 13)} ${dayIncomes.length} pelanggan${dPorsi ? ` • ${U.number(dPorsi)} porsi` : ''}
+                  </span>` : ''}
+                </div>
                 <div class="trx-group__totals">
                   ${dIn ? `<span class="is-income">+${U.rupiah(dIn)}</span>` : ''}
                   ${dOut ? `<span class="is-expense">−${U.rupiah(dOut)}</span>` : ''}
@@ -246,27 +253,12 @@
 
   function exportCSV(list, range) {
     if (!list.length) { UI.toast('Tidak ada data untuk diekspor', 'warn'); return; }
-    const rows = [['Tanggal', 'Jam', 'Jenis', 'Keterangan', 'Kategori/Menu', 'Metode', 'Jumlah']];
-    list.slice().reverse().forEach(t => {
-      const isIncome = t.type === 'income';
-      const detail = isIncome
-        ? (t.items || []).map(it => `${it.name} x${it.qty}`).join(', ')
-        : S.getCategory(t.categoryId).name;
-      const method = (S.PAYMENT_METHODS.find(m => m.id === t.method) || {}).name || t.method || '';
-      rows.push([
-        t.date, t.time || '', isIncome ? 'Pemasukan' : 'Pengeluaran',
-        t.note || '', detail, method, (isIncome ? '' : '-') + t.total
-      ]);
+    global.Exporter.saveWorkbook(list.slice().reverse(), {
+      from: range.from, to: range.to,
+      title: S.get().profile.businessName || '',
+      rangeLabel: `${U.formatDate(range.from, true)} – ${U.formatDate(range.to, true)}`,
+      filename: `transaksi-${range.from}-sd-${range.to}`
     });
-    const income = U.sum(list.filter(t => t.type === 'income'), t => t.total);
-    const expense = U.sum(list.filter(t => t.type === 'expense'), t => t.total);
-    rows.push([]);
-    rows.push(['', '', '', '', '', 'Total Pemasukan', income]);
-    rows.push(['', '', '', '', '', 'Total Pengeluaran', -expense]);
-    rows.push(['', '', '', '', '', 'Laba Bersih', income - expense]);
-
-    U.download(`transaksi-${range.from}-sd-${range.to}.csv`, '﻿' + U.toCSV(rows), 'text/csv');
-    UI.toast('File CSV diunduh. Bisa dibuka di Excel atau Google Sheets.', 'success', 5000);
   }
 
   global.Views.transaksi = render;
