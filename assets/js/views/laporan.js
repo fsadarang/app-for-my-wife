@@ -51,7 +51,7 @@
           <p class="page-sub">Lihat perkembangan usahamu dan temukan hal yang bisa diperbaiki.</p>
         </div>
         <div class="page-head__actions">
-          <button type="button" class="btn btn--soft" data-act="csv">${I.get('download', 18)} Ekspor CSV</button>
+          <button type="button" class="btn btn--soft" data-act="csv">${I.get('download', 18)} Ekspor Excel</button>
           <button type="button" class="btn btn--soft" data-act="print">${I.get('print', 18)} Cetak</button>
         </div>
       </section>
@@ -81,7 +81,7 @@
 
         <section class="report-cards">
           ${bigCard('Total Pemasukan', sum.income, prev.income, 'arrowUp', 'income',
-            `${sum.orderCount} transaksi • rata-rata ${U.rupiah(sum.avgOrder)}/transaksi`)}
+            `${sum.customerCount} pelanggan • ${U.number(sum.itemsSold)} porsi • rata-rata ${U.rupiah(sum.avgOrder)}/pelanggan`)}
           ${bigCard('Total Pengeluaran', sum.expense, prev.expense, 'arrowDown', 'expense',
             `${sum.expenseCount} catatan • ${sum.income ? ((sum.expense / sum.income) * 100).toFixed(0) + '% dari pemasukan' : 'belum ada pemasukan'}`, true)}
           ${bigCard('Laba Bersih', sum.profit, prev.profit, 'trendUp', sum.profit >= 0 ? 'profit' : 'loss',
@@ -254,7 +254,7 @@
       render(root);
     });
 
-    root.querySelector('[data-act=csv]').addEventListener('click', () => exportReport(range, sum, series, expRows, topRows));
+    root.querySelector('[data-act=csv]').addEventListener('click', () => exportReport(range));
     root.querySelector('[data-act=print]').addEventListener('click', () => {
       const target = root.querySelector('#reportPrint');
       document.body.classList.add('is-printing');
@@ -372,34 +372,14 @@
 
   /* ---------- Ekspor ---------- */
 
-  function exportReport(range, sum, series, expRows, topRows) {
-    const st = S.get();
-    const rows = [];
-    rows.push(['LAPORAN USAHA', st.profile.businessName || '']);
-    rows.push(['Periode', `${range.from} s/d ${range.to}`]);
-    rows.push([]);
-    rows.push(['RINGKASAN']);
-    rows.push(['Total Pemasukan', sum.income]);
-    rows.push(['Total Pengeluaran', sum.expense]);
-    rows.push(['Laba Bersih', sum.profit]);
-    rows.push(['Margin (%)', sum.margin.toFixed(1)]);
-    rows.push(['Jumlah Transaksi Penjualan', sum.orderCount]);
-    rows.push(['Porsi Terjual', sum.itemsSold]);
-    rows.push([]);
-    rows.push(['RINCIAN HARIAN']);
-    rows.push(['Tanggal', 'Pemasukan', 'Pengeluaran', 'Laba']);
-    series.forEach(d => rows.push([d.date, d.income, d.expense, d.profit]));
-    rows.push([]);
-    rows.push(['PENGELUARAN PER KATEGORI']);
-    rows.push(['Kategori', 'Jumlah Catatan', 'Total']);
-    expRows.forEach(r => rows.push([r.name, r.count, r.total]));
-    rows.push([]);
-    rows.push(['PERFORMA MENU']);
-    rows.push(['Menu', 'Terjual', 'Omzet', 'Modal (HPP)', 'Untung']);
-    topRows.forEach(r => rows.push([r.name, r.qty, r.revenue, r.cost, r.profit]));
-
-    U.download(`laporan-${range.from}-sd-${range.to}.csv`, '﻿' + U.toCSV(rows), 'text/csv');
-    UI.toast('Laporan CSV diunduh', 'success');
+  function exportReport(range) {
+    const list = S.sortedDesc(S.inRange(range.from, range.to)).reverse();
+    global.Exporter.saveWorkbook(list, {
+      from: range.from, to: range.to,
+      title: S.get().profile.businessName || '',
+      rangeLabel: `${range.label} • ${U.formatDate(range.from, true)} – ${U.formatDate(range.to, true)}`,
+      filename: `laporan-${range.from}-sd-${range.to}`
+    });
   }
 
   global.Views.laporan = render;

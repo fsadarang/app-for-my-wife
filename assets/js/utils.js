@@ -231,27 +231,60 @@
     return String(haystack || '').toLowerCase().includes(String(needle).toLowerCase());
   }
 
-  /** Unduh file di sisi browser */
-  function download(filename, content, mime) {
-    const blob = new Blob([content], { type: (mime || 'text/plain') + ';charset=utf-8;' });
+  /** Unduhan biasa lewat tautan sementara */
+  function blobDownload(filename, content, mime) {
+    const isText = typeof content === 'string';
+    const type = mime || (isText ? 'text/plain' : 'application/octet-stream');
+    const blob = new Blob([content], { type: isText ? type + ';charset=utf-8' : type });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
+    a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return { ok: true, via: 'blob' };
+  }
+
+  /**
+   * Unduh berkas. Saat aplikasi dibuka lewat halaman Artifact, unduhan
+   * biasa bisa diblokir, jadi jembatan bawaan dipakai lebih dulu bila ada.
+   * Mengembalikan Promise<{ok, via, reason}>.
+   */
+  function download(filename, content, mime) {
+    const host = global.claude && global.claude.downloads;
+    if (host && typeof host.save === 'function') {
+      return host.save({ filename: filename, data: content })
+        .then(() => ({ ok: true, via: 'host' }))
+        .catch(err => {
+          const code = err && err.code;
+          if (code === 'declined') return { ok: false, reason: 'declined' };
+          if (code === 'too_large') return { ok: false, reason: 'too_large' };
+          // Jenis berkas tidak diizinkan / jembatan tidak tersedia:
+          // coba cara unduhan biasa.
+          try { return blobDownload(filename, content, mime); }
+          catch (e) { return { ok: false, reason: code || 'unavailable' }; }
+        });
+    }
+    try { return Promise.resolve(blobDownload(filename, content, mime)); }
+    catch (e) { return Promise.resolve({ ok: false, reason: 'unavailable' }); }
   }
 
   /** Escape 1 sel CSV */
   function csvCell(v) {
     const s = String(v == null ? '' : v);
-    return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
 
+  /**
+   * Koma dipakai sebagai pemisah — pemisah baku yang dikenali Excel
+   * maupun Google Sheets. Titik koma sempat membuat seluruh baris
+   * menumpuk di satu kolom.
+   */
   function toCSV(rows) {
-    return rows.map(r => r.map(csvCell).join(';')).join('\r\n');
+    return rows.map(r => r.map(csvCell).join(',')).join('\r\n');
   }
 
   global.Utils = {
@@ -260,6 +293,7 @@
     toISODate, fromISODate, today, nowTime, addDays, diffDays,
     formatDate, formatDateFull, formatDateRelative,
     startOfMonth, endOfMonth, startOfWeek, monthLabel, monthKey, dateRangeList, greeting,
-    uid, escapeHtml, debounce, sum, groupBy, deepClone, matches, download, toCSV
+    uid, escapeHtml, debounce, sum, groupBy, deepClone, matches,
+    download, blobDownload, toCSV
   };
 })(window);

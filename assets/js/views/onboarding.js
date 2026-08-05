@@ -183,7 +183,8 @@
           <li><span class="onb__num">2</span><div><b>Belanja atau bayar sesuatu?</b><p>Tekan tombol <b>Catat Pengeluaran</b>, isi jumlahnya, pilih kategori.</p></div></li>
           <li><span class="onb__num">3</span><div><b>Akhir hari</b><p>Lihat <b>Beranda</b> untuk laba hari ini, atau <b>Laporan</b> untuk gambaran menyeluruh.</p></div></li>
         </ol>
-        <div class="onb__note">${I.get('info', 16)} Datamu tersimpan di perangkat ini. Sesekali buka Pengaturan → <b>Simpan Cadangan</b> agar aman.</div>`;
+        <div class="onb__note">${I.get('info', 16)} Catatanmu tersimpan di <b>HP ini saja</b> dan tidak berpindah sendiri ke HP lain.
+          Sesekali buka Pengaturan → <b>Simpan Cadangan</b>, dan kalau ganti HP pakai <b>Pindah ke HP Lain</b>.</div>`;
       foot.innerHTML = `
         <button type="button" class="btn btn--ghost" data-act="back">${I.get('arrowLeft', 18)} Kembali</button>
         <span class="spacer"></span>

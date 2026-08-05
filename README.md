@@ -30,23 +30,30 @@ uang masuk vs keluar (7/14/30 hari), menu terlaris, rincian pengeluaran terbesar
 aktivitas terakhir.
 
 ### 🛒 Kasir
-Layar utama untuk mencatat penjualan. Ketuk menu yang dibeli — jumlahnya bertambah
-otomatis. Ada pencarian, pengelompokan menu, diskon, empat metode pembayaran
+Satu catatan = **satu pelanggan**, bukan satu menu. Isi nama pelanggan (boleh
+dikosongkan), ketuk menu yang dibeli — boleh campur beberapa varian sekaligus dan
+totalnya dijumlahkan di akhir. Tiap item bisa diberi catatan sendiri ("tidak pedas",
+"bungkus terpisah").
+
+Untuk pembayaran tunai, isi **uang yang diberikan** dan aplikasi langsung menghitung
+**kembaliannya**; kalau uangnya kurang, layar memberi peringatan dan penjualan tidak
+tersimpan. Ada juga pencarian, pengelompokan menu, diskon, empat metode pembayaran
 (tunai / QRIS / transfer / ojol), pencatatan mundur untuk transaksi kemarin, item di luar
 daftar menu, serta struk yang bisa dicetak.
 
 ### 🧾 Transaksi
-Semua catatan uang masuk dan keluar, dikelompokkan per tanggal beserta subtotal harian.
+Semua catatan uang masuk dan keluar, dikelompokkan per tanggal — tiap hari menampilkan
+**berapa pelanggan yang membeli, berapa porsi terjual**, dan apa saja pesanan mereka.
 Bisa disaring berdasarkan jenis, periode, kategori, dan kata kunci. Ketuk salah satu
 catatan untuk mengubah atau menghapusnya — penghapusan bisa dibatalkan lewat
-tombol **Batalkan** pada notifikasi. Hasil saringan bisa diekspor ke CSV.
+tombol **Batalkan** pada notifikasi. Hasil saringan bisa diekspor ke Excel.
 
 ### 📊 Laporan
 Ringkasan periode (hari ini / 7 hari / bulan ini / bulan lalu / rentang bebas) dengan
 pembanding periode sebelumnya, grafik harian, tren laba, rincian pengeluaran per kategori,
 cara pembayaran, dan tabel performa tiap menu lengkap dengan margin. Di bagian atas ada
 **insight otomatis**: hari paling ramai, pengeluaran yang paling menyerap uang, menu paling
-menguntungkan, dan menu bermargin tipis. Bisa diekspor ke CSV atau dicetak.
+menguntungkan, dan menu bermargin tipis. Bisa diekspor ke Excel atau dicetak.
 
 ### 📖 Menu & Kategori
 Kelola daftar jualan: nama, ikon, kelompok, harga jual, dan HPP (modal bahan per porsi).
@@ -56,21 +63,43 @@ warnanya, atau dihapus.
 
 ### ⚙️ Pengaturan
 Profil usaha, target harian, modal awal, tema terang/gelap/otomatis, cadangan &
-pemulihan data, ekspor CSV, data contoh, panduan singkat, dan pintasan keyboard.
+pemulihan data, pindah ke HP lain, ekspor Excel, data contoh, panduan singkat, dan pintasan keyboard.
 
 ---
 
+## 📊 Ekspor ke Excel
+
+Tombol **Ekspor Excel** menghasilkan berkas `.xlsx` asli dengan kolom yang sudah
+terpisah rapi — bukan CSV yang sering menumpuk jadi satu kolom di Excel HP. Isinya
+enam sheet:
+
+| Sheet | Isi |
+| --- | --- |
+| Ringkasan | Total pemasukan, pengeluaran, laba, jumlah pelanggan |
+| Rekap Harian | Per tanggal: jumlah pelanggan, porsi terjual, pemasukan, pengeluaran |
+| Transaksi | Satu baris tiap pelanggan, lengkap dengan uang diberikan & kembalian |
+| **Rincian Item** | **Satu baris tiap item** — nama pelanggan, item, jumlah, harga satuan, subtotal, catatan |
+| Pengeluaran | Belanja dan biaya, per kategori |
+| Peringkat Menu | Menu terlaris beserta omzet dan untungnya |
+
 ## Catatan Penting Soal Data
 
-Seluruh data disimpan di **browser perangkat itu sendiri** (`localStorage`) — tidak dikirim
-ke server mana pun. Konsekuensinya:
+Seluruh data disimpan di **browser HP itu sendiri** (`localStorage`) — tidak dikirim ke
+server mana pun. Konsekuensinya:
 
-- Data **tidak otomatis pindah** antar HP/laptop atau antar browser.
+- Aplikasi ini **tidak punya sistem login**, karena tidak ada server yang menyimpan akun.
+- Data **tidak otomatis pindah** antar HP/laptop atau antar browser. Membuka tautan yang
+  sama di HP lain akan tampil seperti aplikasi baru.
 - Membersihkan data browser / *clear site data* akan **menghapus** catatan.
 
-Karena itu, biasakan menekan **Pengaturan → Simpan Cadangan** secara berkala. Berkas
-`.json` yang terunduh bisa dipulihkan kapan saja lewat **Pulihkan Cadangan** — termasuk
-di perangkat lain.
+Untuk pindah HP, buka **Pengaturan → Pindah ke HP Lain**: seluruh data disalin jadi teks
+yang bisa dikirim ke diri sendiri lewat WhatsApp, lalu ditempel di HP tujuan. Untuk
+cadangan rutin, pakai **Simpan Cadangan** (berkas `.json`) dan **Pulihkan Cadangan**.
+
+> Kalau suatu saat butuh login sungguhan dengan data yang otomatis sama di semua HP,
+> aplikasi ini perlu ditambah server dan basis data (misalnya Firebase atau Supabase).
+> Itu di luar cakupan versi statis ini, yang sengaja dibuat tanpa biaya bulanan dan
+> tanpa ketergantungan pada layanan pihak ketiga.
 
 ## Cara Menghitung Angkanya
 
@@ -80,6 +109,8 @@ di perangkat lain.
 | Saldo Kas | modal awal + seluruh pemasukan − seluruh pengeluaran |
 | Margin | laba bersih ÷ pemasukan × 100% |
 | Untung per menu | (harga jual − HPP) × jumlah terjual |
+| Kembalian | uang yang diberikan − total bayar |
+| Jumlah pelanggan | banyaknya pesanan yang tercatat pada hari itu |
 
 **Untung per menu** dipisahkan dari Laba Bersih dan sengaja tidak dijumlahkan ke dalamnya —
 supaya belanja bahan tidak terhitung dua kali (sekali sebagai pengeluaran nyata, sekali lagi
@@ -115,6 +146,7 @@ assets/
     store.js             data, penyimpanan lokal, dan seluruh perhitungan
     ui.js                toast, modal, konfirmasi, tema, router hash
     charts.js            grafik batang, garis, donat, cincin progres (SVG murni)
+    export.js            penulis berkas .xlsx (ZIP + XML) tanpa library
     forms.js             modal isian yang dipakai bersama antar halaman
     app.js               kerangka aplikasi, navigasi, pintasan keyboard
     views/               satu berkas untuk tiap halaman

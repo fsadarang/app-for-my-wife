@@ -6,7 +6,7 @@
 
   const U = global.Utils;
   const KEY = 'dapurku.data.v1';
-  const SCHEMA = 1;
+  const SCHEMA = 2;   // 2: pesanan per pelanggan (nama, uang dibayar, kembalian)
 
   /* ---------- Data bawaan ---------- */
 
@@ -71,18 +71,33 @@
   let saveTimer = null;
   let storageOK = true;
 
+  // Bila data yang tersimpan gagal dibaca, penyimpanan dikunci. Tanpa ini,
+  // keadaan kosong hasil gagal-baca bisa menimpa catatan asli yang masih ada
+  // di perangkat — dan itu tidak bisa dikembalikan.
+  let loadFailed = false;
+
   function load() {
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return false;
       const parsed = JSON.parse(raw);
       state = migrate(parsed);
+      loadFailed = false;
       return true;
     } catch (e) {
-      console.warn('Gagal memuat data:', e);
+      console.error('Gagal memuat data tersimpan:', e);
+      loadFailed = true;
+      setTimeout(() => {
+        if (global.UI && global.UI.toast) {
+          global.UI.toast('Data tersimpan tidak terbaca. Penyimpanan dikunci sementara agar catatan lamamu tidak tertimpa — pulihkan lewat cadangan.', 'error', 12000);
+        }
+      }, 800);
       return false;
     }
   }
+
+  /** Buka kunci setelah pengguna sengaja mengganti data (pulihkan / reset) */
+  function unlockStorage() { loadFailed = false; }
 
   function migrate(data) {
     const base = defaultState();
@@ -95,11 +110,26 @@
     if (!Array.isArray(s.expenseCategories) || !s.expenseCategories.length) {
       s.expenseCategories = U.deepClone(DEFAULT_EXPENSE_CATEGORIES);
     }
+
+    // Skema 1 -> 2: transaksi lama belum punya nama pelanggan, uang
+    // dibayar, kembalian, atau catatan per item. Diisi nilai kosong agar
+    // catatan yang sudah ada tetap utuh dan tetap bisa dibuka.
+    s.transactions.forEach(t => {
+      if (t.type !== 'income') return;
+      if (t.customerName == null) t.customerName = '';
+      if (t.cashGiven == null) t.cashGiven = 0;
+      if (t.change == null) t.change = 0;
+      if (Array.isArray(t.items)) {
+        t.items.forEach(it => { if (it.note == null) it.note = ''; });
+      }
+    });
+
     s.schema = SCHEMA;
     return s;
   }
 
   function persist() {
+    if (loadFailed) return;   // jangan timpa data yang belum sempat dibaca
     try {
       state.meta.updatedAt = new Date().toISOString();
       localStorage.setItem(KEY, JSON.stringify(state));
@@ -242,36 +272,50 @@
 
   /* ---------- Transaksi ---------- */
 
-  /**
-   * Pemasukan.
-   * items: [{ productId, name, emoji, qty, price, cost }]
-   */
-  function addIncome(data) {
-    const items = (data.items || []).map(it => ({
+  function normalizeItems(list) {
+    return (list || []).map(it => ({
       productId: it.productId || null,
       name: it.name || 'Item',
       emoji: it.emoji || '🍽️',
       qty: Math.max(1, Number(it.qty) || 1),
       price: Math.max(0, Number(it.price) || 0),
-      cost: Math.max(0, Number(it.cost) || 0)
+      cost: Math.max(0, Number(it.cost) || 0),
+      note: (it.note || '').trim()
     }));
+  }
+
+  /**
+   * Satu pemasukan = satu pesanan dari satu pelanggan.
+   * items: [{ productId, name, emoji, qty, price, cost, note }]
+   * Boleh berisi beberapa varian sekaligus; totalnya dijumlahkan.
+   */
+  function addIncome(data) {
+    const items = normalizeItems(data.items);
     const subtotal = U.sum(items, it => it.qty * it.price);
     const discount = Math.max(0, Math.min(subtotal, Number(data.discount) || 0));
     const total = data.total != null && !items.length
       ? Math.max(0, Number(data.total) || 0)
       : subtotal - discount;
 
+    // Kembalian hanya bermakna kalau uang tunai yang diberikan tercatat
+    // dan nilainya menutup total belanja.
+    const cashGiven = Math.max(0, Number(data.cashGiven) || 0);
+    const change = cashGiven > 0 ? Math.max(0, cashGiven - total) : 0;
+
     const t = {
       id: U.uid('trx'),
       type: 'income',
       date: data.date || U.today(),
       time: data.time || U.nowTime(),
+      customerName: (data.customerName || '').trim(),
       items: items,
       subtotal: items.length ? subtotal : total,
       discount: items.length ? discount : 0,
       total: total,
       hpp: U.sum(items, it => it.qty * it.cost),
       method: data.method || 'tunai',
+      cashGiven: cashGiven,
+      change: change,
       note: (data.note || '').trim(),
       createdAt: new Date().toISOString()
     };
@@ -308,15 +352,9 @@
       if (patch.categoryId != null) t.categoryId = patch.categoryId;
       if (patch.total != null) t.total = Math.max(0, Number(patch.total) || 0);
     } else {
+      if (patch.customerName != null) t.customerName = String(patch.customerName).trim();
       if (patch.items) {
-        t.items = patch.items.map(it => ({
-          productId: it.productId || null,
-          name: it.name || 'Item',
-          emoji: it.emoji || '🍽️',
-          qty: Math.max(1, Number(it.qty) || 1),
-          price: Math.max(0, Number(it.price) || 0),
-          cost: Math.max(0, Number(it.cost) || 0)
-        }));
+        t.items = normalizeItems(patch.items);
         t.subtotal = U.sum(t.items, it => it.qty * it.price);
         t.hpp = U.sum(t.items, it => it.qty * it.cost);
       }
@@ -329,6 +367,10 @@
         t.total = Math.max(0, Number(patch.total) || 0);
         t.subtotal = t.total;
       }
+      if (patch.cashGiven != null) t.cashGiven = Math.max(0, Number(patch.cashGiven) || 0);
+      // Kembalian selalu dihitung ulang, karena total atau uang yang
+      // diberikan bisa saja berubah saat transaksi diperbaiki.
+      t.change = (t.cashGiven || 0) > 0 ? Math.max(0, t.cashGiven - t.total) : 0;
     }
     commit();
     return t;
@@ -386,11 +428,34 @@
       grossProfit: income - hpp,
       margin: income ? ((income - expense) / income) * 100 : 0,
       orderCount: incomes.length,
+      // Satu pesanan = satu pelanggan yang membeli.
+      customerCount: incomes.length,
+      namedCustomers: new Set(incomes.map(t => (t.customerName || '').trim().toLowerCase())
+        .filter(Boolean)).size,
       expenseCount: expenses.length,
       itemsSold,
       avgOrder: incomes.length ? income / incomes.length : 0,
       transactions: list
     };
+  }
+
+  /**
+   * Catatan pelanggan per hari: berapa orang yang membeli dan apa saja
+   * yang mereka beli. Dipakai halaman Pelanggan dan rekap harian.
+   */
+  function customersByDay(from, to) {
+    const byDate = U.groupBy(inRange(from, to).filter(t => t.type === 'income'), t => t.date);
+    return Array.from(byDate.keys()).sort().reverse().map(date => {
+      const orders = sortedDesc(byDate.get(date));
+      return {
+        date,
+        orders,
+        customerCount: orders.length,
+        itemsSold: U.sum(orders, t => U.sum(t.items || [], it => it.qty)),
+        total: U.sum(orders, t => t.total),
+        avg: orders.length ? U.sum(orders, t => t.total) / orders.length : 0
+      };
+    });
   }
 
   /** Saldo kas estimasi = modal awal + seluruh pemasukan - seluruh pengeluaran */
@@ -515,7 +580,8 @@
           items,
           date,
           time: String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0'),
-          method: methods[Math.floor(rnd() * methods.length)]
+          method: methods[Math.floor(rnd() * methods.length)],
+          customerName: rnd() > 0.25 ? DEMO_NAMES[Math.floor(rnd() * DEMO_NAMES.length)] : ''
         });
       }
 
@@ -545,17 +611,30 @@
     commit();
   }
 
+  const DEMO_NAMES = [
+    'Bu Ani', 'Pak Budi', 'Mbak Sari', 'Mas Dedi', 'Bu Rina', 'Pak Joko',
+    'Dek Nisa', 'Bu Tuti', 'Pak Hendra', 'Mbak Lia', 'Bu Yanti', 'Mas Agus',
+    'Pelanggan Ojol', 'Bu Dewi', 'Pak Rahmat'
+  ];
+
   function addIncomeSilent(data) {
     const items = data.items.map(it => ({
       productId: it.productId, name: it.name, emoji: it.emoji,
-      qty: it.qty, price: it.price, cost: it.cost
+      qty: it.qty, price: it.price, cost: it.cost, note: ''
     }));
     const subtotal = U.sum(items, it => it.qty * it.price);
+    const method = data.method || 'tunai';
+    // Pada pembayaran tunai, uang biasanya dibulatkan ke atas.
+    const cashGiven = method === 'tunai' ? Math.ceil(subtotal / 5000) * 5000 : 0;
     state.transactions.push({
       id: U.uid('trx'), type: 'income', date: data.date, time: data.time,
+      customerName: data.customerName || '',
       items, subtotal, discount: 0, total: subtotal,
       hpp: U.sum(items, it => it.qty * it.cost),
-      method: data.method || 'tunai', note: data.note || '',
+      method: method,
+      cashGiven: cashGiven,
+      change: cashGiven > 0 ? Math.max(0, cashGiven - subtotal) : 0,
+      note: data.note || '',
       createdAt: new Date().toISOString(), demo: true
     });
   }
@@ -578,6 +657,7 @@
   }
 
   function resetAll() {
+    unlockStorage();
     state = defaultState();
     state.settings.onboarded = false;
     commit();
@@ -597,6 +677,7 @@
     if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.transactions)) {
       throw new Error('Format file tidak dikenali.');
     }
+    unlockStorage();
     state = migrate(parsed);
     state.settings.onboarded = true;
     commit();
@@ -605,13 +686,13 @@
 
   global.Store = {
     KEY, SCHEMA, PAYMENT_METHODS, DEFAULT_EXPENSE_CATEGORIES,
-    load, get, subscribe, commit, persist, isStorageOK,
+    load, get, subscribe, commit, persist, isStorageOK, unlockStorage,
     updateProfile, updateSettings,
     productGroups, addProduct, updateProduct, removeProduct, getProduct,
     addCategory, updateCategory, removeCategory, getCategory,
     addIncome, addExpense, updateTransaction, removeTransaction, restoreTransaction, getTransaction,
     inRange, sortedDesc, summary, cashBalance, dailySeries, topProducts,
-    expenseByCategory, incomeByMethod, firstDate,
+    expenseByCategory, incomeByMethod, firstDate, customersByDay,
     seedProducts, seedDemoTransactions, hasDemoData, clearDemoData,
     resetAll, clearTransactions, exportJSON, importJSON
   };

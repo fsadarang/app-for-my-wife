@@ -799,6 +799,10 @@ kbd {
   font-size: .74rem; color: var(--text-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.trx__items {
+  font-size: .78rem; color: var(--text-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .trx__amount { font-weight: 800; font-size: .93rem; white-space: nowrap; }
 .trx__amount--income { color: var(--income); }
 .trx__amount--expense { color: var(--expense); }
@@ -814,6 +818,13 @@ kbd {
   padding: 10px 6px; border-bottom: 1px solid var(--border); margin-bottom: 4px;
 }
 .trx-group__head h3 { font-size: .92rem; }
+.trx-group__title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.trx-group__customers {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 9px; border-radius: var(--r-full);
+  background: var(--primary-soft); color: var(--primary);
+  font-size: .72rem; font-weight: 700;
+}
 .trx-group__totals { display: flex; align-items: center; gap: 10px; font-size: .8rem; font-weight: 700; }
 .trx-group__totals .is-income { color: var(--income); }
 .trx-group__totals .is-expense { color: var(--expense); }
@@ -925,22 +936,28 @@ kbd {
 @keyframes bump { 30% { transform: scale(1.06); } }
 
 .pos__cart { position: sticky; top: 78px; }
+/* Seluruh isi panel digulung sebagai satu bagian. Kalau hanya daftar item
+   yang bisa digulung, bagian bawah yang panjang (nama pelanggan, uang tunai,
+   kembalian) menggencet daftar itu sampai tidak terlihat sama sekali. */
 .cart {
   display: flex; flex-direction: column; max-height: calc(100vh - 100px);
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-lg); box-shadow: var(--shadow); overflow: hidden;
+  border-radius: var(--r-lg); box-shadow: var(--shadow);
+  overflow-y: auto;
 }
 .cart__head {
+  position: sticky; top: 0; z-index: 2;
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 15px 16px; border-bottom: 1px solid var(--border);
+  background: var(--surface);
 }
 .cart__title { display: flex; align-items: center; gap: 8px; font-size: .98rem; }
 .cart__title svg { color: var(--primary); }
 .cart__head-actions { display: flex; align-items: center; gap: 6px; }
 .cart__count { font-size: .78rem; color: var(--text-3); font-weight: 600; }
 .cart__collapse { display: none; }
-.cart__items { flex: 1; overflow-y: auto; padding: 8px; min-height: 0; }
-.cart__foot { border-top: 1px solid var(--border); padding: 14px 16px; display: flex; flex-direction: column; gap: 13px; }
+.cart__items { flex: none; padding: 8px; }
+.cart__foot { flex: none; border-top: 1px solid var(--border); padding: 14px 16px; display: flex; flex-direction: column; gap: 13px; }
 
 .cart__empty { text-align: center; padding: 30px 18px; display: flex; flex-direction: column; gap: 4px; align-items: center; }
 .cart__empty-art { font-size: 2.2rem; }
@@ -957,6 +974,42 @@ kbd {
 .cart-item__price b { color: var(--text-2); }
 .cart-item__del { width: 30px; height: 30px; color: var(--text-3); }
 .cart-item__del:hover { color: var(--expense); background: var(--expense-soft); }
+
+.cart__customer { padding: 12px 16px 0; }
+.cart__customer input { font-weight: 600; }
+
+.cart-item__note { font-size: .72rem; color: var(--primary); display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+.cart-item__controls { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex: none; }
+.cart-item__tools { display: flex; align-items: center; gap: 2px; }
+.cart-item__note-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: var(--r-full); cursor: pointer;
+  background: transparent; border: 1px dashed var(--border);
+  font-size: .7rem; font-weight: 600; color: var(--text-3);
+  transition: color .15s, border-color .15s, background .15s;
+}
+.cart-item__note-btn:hover { color: var(--primary); border-color: var(--primary); }
+.cart-item__note-btn.is-set {
+  color: var(--primary); border-style: solid; border-color: var(--primary); background: var(--primary-soft);
+}
+
+/* Uang tunai & kembalian */
+.cash-box-pay {
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 13px; border-radius: var(--r-md);
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.change-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; border-radius: var(--r);
+  background: var(--surface-3); font-size: .88rem; font-weight: 600; color: var(--text-2);
+}
+.change-row span { display: flex; align-items: center; gap: 6px; }
+.change-row b { font-size: 1.15rem; font-weight: 800; }
+.change-row.is-ok { background: var(--income-soft); color: var(--income); }
+.change-row.is-ok b { color: var(--income); }
+.change-row.is-short { background: var(--expense-soft); color: var(--expense); }
+.change-row.is-short b { color: var(--expense); font-size: .95rem; }
 
 .cart__summary { display: flex; flex-direction: column; gap: 7px; }
 .cart__row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: .86rem; color: var(--text-2); }
@@ -1105,6 +1158,28 @@ kbd {
 .action-tile__title { font-weight: 700; font-size: .9rem; }
 .action-tile__text { font-size: .78rem; color: var(--text-3); line-height: 1.4; }
 
+.action-tile--wide { grid-column: 1 / -1; }
+
+/* Pindah data antar HP */
+.transfer { display: flex; flex-direction: column; gap: 14px; }
+.transfer section { display: flex; flex-direction: column; gap: 12px; }
+.transfer__box {
+  width: 100%; resize: vertical; font-size: .74rem; line-height: 1.4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 10px 12px; border-radius: var(--r); border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text-2); word-break: break-all;
+}
+.transfer__box:focus {
+  outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+.transfer__stat {
+  display: flex; align-items: center; gap: 7px;
+  font-size: .78rem; font-weight: 600; color: var(--text-2);
+  padding: 9px 12px; border-radius: var(--r); background: var(--cash-soft);
+}
+.transfer__actions { display: flex; gap: 8px; }
+
 .data-facts { display: flex; flex-wrap: wrap; gap: 10px; }
 .data-fact {
   flex: 1; min-width: 120px; padding: 10px 13px; border-radius: var(--r);
@@ -1223,6 +1298,7 @@ kbd {
 .receipt__logo { font-size: 1.8rem; }
 .receipt__head h3 { font-size: 1rem; margin: 4px 0 2px; }
 .receipt__head p { font-size: .72rem; color: #555; }
+.receipt__customer { font-size: .78rem !important; color: #111 !important; margin-top: 3px; }
 .receipt__divider { border-top: 1px dashed #999; margin: 10px 0; }
 .receipt__table { width: 100%; border-collapse: collapse; }
 .receipt__table td { padding: 3px 0; vertical-align: top; }
@@ -1345,7 +1421,8 @@ kbd {
   .pos__cart.is-open { transform: none; }
   .cart {
     border-radius: var(--r-lg) var(--r-lg) 0 0;
-    max-height: 82vh; border-bottom: none;
+    max-height: 86vh; border-bottom: none;
+    -webkit-overflow-scrolling: touch;
     padding-bottom: env(safe-area-inset-bottom);
   }
   .cart__collapse { display: grid; }

@@ -88,7 +88,7 @@
             label: 'Pemasukan', icon: 'arrowUp', tone: 'income',
             value: U.rupiah(todaySum.income),
             change: U.pctChange(todaySum.income, ydaySum.income),
-            hint: `${todaySum.orderCount} transaksi`
+            hint: `${todaySum.customerCount} pelanggan • ${U.number(todaySum.itemsSold)} porsi`
           })}
           ${kpiCard({
             label: 'Pengeluaran', icon: 'arrowDown', tone: 'expense',
@@ -258,10 +258,12 @@
     const isIncome = t.type === 'income';
     const cat = isIncome ? null : S.getCategory(t.categoryId);
     const method = S.PAYMENT_METHODS.find(m => m.id === t.method);
+    const itemText = (t.items && t.items.length)
+      ? t.items.map(it => `${it.name}${it.qty > 1 ? ' ×' + it.qty : ''}`).join(', ')
+      : '';
+    // Nama pelanggan jadi judul barisnya; pesanannya turun ke baris keterangan.
     const title = isIncome
-      ? (t.items && t.items.length
-        ? t.items.map(it => `${it.name}${it.qty > 1 ? ' ×' + it.qty : ''}`).join(', ')
-        : 'Pemasukan')
+      ? (t.customerName || itemText || 'Pemasukan')
       : cat.name;
     const emoji = isIncome ? (t.items && t.items.length ? (t.items[0].emoji || '🧾') : '💰') : cat.emoji;
 
@@ -270,9 +272,12 @@
         <span class="trx__avatar trx__avatar--${isIncome ? 'income' : 'expense'}">${emoji}</span>
         <div class="trx__body">
           <p class="trx__title">${U.escapeHtml(title)}</p>
+          ${isIncome && t.customerName && itemText
+            ? `<p class="trx__items">${U.escapeHtml(itemText)}</p>` : ''}
           <p class="trx__meta">
             ${U.formatDateRelative(t.date)} • ${t.time || '-'}
             ${method ? ` • ${method.emoji} ${U.escapeHtml(method.name)}` : ''}
+            ${t.change ? ` • kembali ${U.rupiah(t.change)}` : ''}
             ${t.note ? ` • ${U.escapeHtml(t.note)}` : ''}
           </p>
         </div>
