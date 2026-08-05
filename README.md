@@ -30,10 +30,15 @@ uang masuk vs keluar (7/14/30 hari), menu terlaris, rincian pengeluaran terbesar
 aktivitas terakhir.
 
 ### 🛒 Kasir
-Satu catatan = **satu pelanggan**, bukan satu menu. Isi nama pelanggan (boleh
-dikosongkan), ketuk menu yang dibeli — boleh campur beberapa varian sekaligus dan
-totalnya dijumlahkan di akhir. Tiap item bisa diberi catatan sendiri ("tidak pedas",
-"bungkus terpisah").
+Mencatat penjualan lewat dua langkah, mengikuti urutan melayani pembeli:
+
+1. **Siapa yang membeli** — isi nama pelanggan lebih dulu (boleh dilewati lewat tombol
+   *Lanjut tanpa nama*).
+2. **Apa yang dibeli** — daftar menu baru muncul di langkah ini. Ketuk menu yang dipesan,
+   boleh campur beberapa varian sekaligus, dan seluruhnya dijumlahkan jadi satu total.
+
+Setelah disimpan, layar kembali ke langkah 1 untuk pelanggan berikutnya. Tiap item bisa
+diberi catatan sendiri ("tidak pedas", "bungkus terpisah").
 
 Untuk pembayaran tunai, isi **uang yang diberikan** dan aplikasi langsung menghitung
 **kembaliannya**; kalau uangnya kurang, layar memberi peringatan dan penjualan tidak
