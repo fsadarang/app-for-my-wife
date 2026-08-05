@@ -1,5 +1,6 @@
 /* =========================================================
-   View: Kasir — catat penjualan dengan memilih menu
+   View: Kasir — mencatat penjualan dua langkah:
+   (1) siapa pelanggannya, (2) apa saja yang dia beli.
    ========================================================= */
 (function (global) {
   'use strict';
@@ -17,17 +18,107 @@
   let customerName = '';
   let cashGiven = 0;        // uang yang diberikan pelanggan (tunai)
 
+  // 'pelanggan' = isi nama dulu, 'pesanan' = pilih menunya.
+  let stage = 'pelanggan';
+
   function cartTotalQty() { return U.sum(cart, it => it.qty); }
   function cartSubtotal() { return U.sum(cart, it => it.qty * it.price); }
   function cartTotal() { return Math.max(0, cartSubtotal() - Math.min(discount, cartSubtotal())); }
 
   function render(root) {
+    saleDate = saleDate || U.today();
+    if (stage === 'pelanggan') renderCustomerStep(root);
+    else renderOrderStep(root);
+  }
+
+  /* ---------- Langkah 1: nama pelanggan ---------- */
+
+  function renderCustomerStep(root) {
+    const today = S.summary(U.today(), U.today());
+    const pending = cart.length;
+
+    root.innerHTML = `
+      <div class="order-start">
+        <div class="order-start__card">
+          <span class="order-start__step">${I.get('users', 15)} Langkah 1 dari 2</span>
+          <h1 class="order-start__title">Pesanan Baru</h1>
+          <p class="order-start__lead">Siapa yang membeli? Setelah ini baru pilih menunya.</p>
+
+          <form class="form" id="startForm" novalidate>
+            <label class="field">
+              <span class="field__label">Nama Pelanggan</span>
+              <input type="text" id="startCustomer" maxlength="60" autocomplete="off" data-autofocus
+                     placeholder="Misal: Bu Ani / Ojol / Meja 3" value="${U.escapeHtml(customerName)}">
+            </label>
+            <button type="submit" class="btn btn--primary btn--lg btn--block">
+              Lanjut Pilih Menu ${I.get('arrowRight', 18)}
+            </button>
+            <button type="button" class="btn btn--ghost btn--block" data-act="skip">
+              Lanjut tanpa nama
+            </button>
+          </form>
+
+          ${pending ? `
+            <div class="order-start__pending">
+              ${I.get('alert', 16)}
+              <span>Masih ada pesanan yang belum disimpan (${pending} item, ${U.rupiah(cartTotal())}).</span>
+              <button type="button" class="btn btn--soft" data-act="resume">Lanjutkan</button>
+            </div>` : ''}
+
+          <div class="order-start__stat">
+            ${I.get('check', 15)} Hari ini sudah <b>${today.customerCount} pelanggan</b>
+            ${today.income ? ` • ${U.rupiah(today.income)}` : ''}
+          </div>
+        </div>
+      </div>`;
+
+    const form = root.querySelector('#startForm');
+    const input = root.querySelector('#startCustomer');
+
+    const go = () => {
+      customerName = input.value.trim();
+      stage = 'pesanan';
+      render(root);
+    };
+
+    form.addEventListener('submit', e => { e.preventDefault(); go(); });
+    root.querySelector('[data-act=skip]').addEventListener('click', () => {
+      input.value = '';
+      go();
+    });
+
+    const resume = root.querySelector('[data-act=resume]');
+    if (resume) resume.addEventListener('click', () => { stage = 'pesanan'; render(root); });
+
+    setTimeout(() => { if (!('ontouchstart' in window)) input.focus(); }, 80);
+  }
+
+  /* ---------- Langkah 2: pilih menu ---------- */
+
+  function renderOrderStep(root) {
     const st = S.get();
     const products = st.products.filter(p => p.active !== false);
-    saleDate = saleDate || U.today();
 
     root.innerHTML = `
       <div class="pos">
+        <div class="pos__customer-bar">
+          <button type="button" class="pos__back" data-act="back" aria-label="Kembali ke nama pelanggan">
+            ${I.get('arrowLeft', 18)}
+          </button>
+          <div class="pos__customer-info">
+            <span class="pos__customer-label">
+              ${I.get('users', 13)}
+              <span class="pos__step-tag">Langkah 2 dari 2 •</span> Pesanan untuk
+            </span>
+            <strong class="pos__customer-name">${customerName
+              ? U.escapeHtml(customerName)
+              : '<span class="is-muted">Tanpa nama</span>'}</strong>
+          </div>
+          <button type="button" class="btn btn--soft btn--sm" data-act="edit-customer">
+            ${I.get('edit', 15)} Ubah
+          </button>
+        </div>
+
         <section class="pos__catalog">
           <div class="pos__toolbar">
             <div class="search">
@@ -46,19 +137,14 @@
         <aside class="pos__cart" data-cart-panel>
           <div class="cart">
             <header class="cart__head">
-              <h2 class="cart__title">${I.get('users', 18)} Pesanan Pelanggan</h2>
+              <h2 class="cart__title">${I.get('cart', 18)} ${customerName
+                ? U.escapeHtml(customerName)
+                : 'Pesanan'}</h2>
               <div class="cart__head-actions">
                 <span class="cart__count" data-cart-count>0 item</span>
                 <button type="button" class="icon-btn cart__collapse" data-act="close-cart" aria-label="Tutup pesanan">${I.get('chevronDown', 18)}</button>
               </div>
             </header>
-            <div class="cart__customer">
-              <label class="field">
-                <span class="field__label">Nama Pelanggan <span class="field__hint">boleh dikosongkan</span></span>
-                <input type="text" id="cartCustomer" maxlength="60" autocomplete="off"
-                       placeholder="Misal: Bu Ani / Ojol / Meja 3" value="${U.escapeHtml(customerName)}">
-              </label>
-            </div>
             <div class="cart__items" data-cart-items></div>
             <div class="cart__foot" data-cart-foot></div>
           </div>
@@ -96,9 +182,10 @@
     root.querySelector('[data-act=open-cart]').addEventListener('click', () => panel.classList.add('is-open'));
     root.querySelector('[data-act=close-cart]').addEventListener('click', () => panel.classList.remove('is-open'));
 
-    /* --- Nama pelanggan --- */
-    const custInput = root.querySelector('#cartCustomer');
-    custInput.addEventListener('input', () => { customerName = custInput.value; });
+    /* --- Kembali ke langkah nama pelanggan --- */
+    const backToCustomer = () => { stage = 'pelanggan'; render(root); };
+    root.querySelector('[data-act=back]').addEventListener('click', backToCustomer);
+    root.querySelector('[data-act=edit-customer]').addEventListener('click', backToCustomer);
 
     renderGroups(root, products);
     renderGrid(root);
@@ -407,9 +494,8 @@
       });
       if (!ok) return;
       cart = []; discount = 0; cashGiven = 0; customerName = '';
-      const custInput = root.querySelector('#cartCustomer');
-      if (custInput) custInput.value = '';
-      renderCart(root); renderGrid(root);
+      stage = 'pelanggan';
+      render(root);
     });
 
     footHost.querySelector('[data-act=checkout]').addEventListener('click', () => checkout(root));
@@ -481,9 +567,10 @@
     const savedChange = trx.change;
     const savedName = trx.customerName;
     cart = []; discount = 0; saleDate = U.today(); customerName = ''; cashGiven = 0;
-    const custInput = root.querySelector('#cartCustomer');
-    if (custInput) custInput.value = '';
-    renderCart(root); renderGrid(root);
+
+    // Kembali ke langkah nama, siap melayani pelanggan berikutnya.
+    stage = 'pelanggan';
+    render(root);
 
     // Kembalian ditampilkan besar supaya mudah dibaca saat melayani pembeli.
     if (savedChange > 0) {
