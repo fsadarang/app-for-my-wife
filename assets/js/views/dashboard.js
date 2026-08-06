@@ -245,7 +245,16 @@
     const emptyBtn = root.querySelector('[data-empty-action]');
     if (emptyBtn) emptyBtn.addEventListener('click', () => UI.navigate('kasir'));
 
+    // Tombol struk berada di dalam baris, jadi klik-nya jangan ikut membuka
+    // jendela rincian.
+    UI.on(root, 'click', '[data-receipt]', (e, node) => {
+      e.stopPropagation();
+      const trx = S.getTransaction(node.dataset.receipt);
+      if (trx) global.Forms.receiptModal(trx);
+    }, 'ReceiptDashboard');
+
     UI.on(root, 'click', '[data-trx]', (e, node) => {
+      if (e.target.closest('[data-receipt]')) return;
       const trx = S.getTransaction(node.dataset.trx);
       if (!trx) return;
       if (trx.type === 'income') global.Forms.incomeDetailModal(trx, () => render(root));
@@ -284,6 +293,11 @@
         <span class="trx__amount trx__amount--${isIncome ? 'income' : 'expense'}">
           ${isIncome ? '+' : '−'}${U.rupiah(t.total)}
         </span>
+        ${isIncome ? `
+          <button type="button" class="trx__receipt" data-receipt="${t.id}"
+                  title="Cetak struk" aria-label="Cetak struk ${U.escapeHtml(title)}">
+            ${I.get('receipt', 16)}
+          </button>` : ''}
         <span class="trx__chev">${I.get('chevronRight', 16)}</span>
       </li>`;
   }

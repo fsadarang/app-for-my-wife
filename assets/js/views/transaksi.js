@@ -238,7 +238,16 @@
     const emptyBtn = root.querySelector('[data-empty-action]');
     if (emptyBtn) emptyBtn.addEventListener('click', () => UI.navigate('kasir'));
 
-    UI.on(root, 'click', '[data-trx]', (e, node) => openTrx(node.dataset.trx, root), 'TrxList');
+    UI.on(root, 'click', '[data-receipt]', (e, node) => {
+      e.stopPropagation();
+      const trx = S.getTransaction(node.dataset.receipt);
+      if (trx) global.Forms.receiptModal(trx);
+    }, 'ReceiptList');
+
+    UI.on(root, 'click', '[data-trx]', (e, node) => {
+      if (e.target.closest('[data-receipt]')) return;
+      openTrx(node.dataset.trx, root);
+    }, 'TrxList');
     UI.on(root, 'keydown', '[data-trx]', (e, node) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTrx(node.dataset.trx, root); }
     }, 'TrxListKey');

@@ -808,6 +808,23 @@ kbd {
 .trx__amount--expense { color: var(--expense); }
 .trx__chev { color: var(--text-3); display: grid; place-items: center; }
 
+/* Tombol cetak struk langsung di baris transaksi */
+.trx__receipt {
+  flex: none; display: grid; place-items: center;
+  width: 34px; height: 34px; border-radius: var(--r);
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-3); cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.trx__receipt:hover {
+  color: var(--primary); border-color: var(--primary); background: var(--primary-soft);
+}
+@media (max-width: 640px) {
+  /* Di layar kecil, tanda panah dilepas supaya tombol struk tetap lega. */
+  .trx__chev { display: none; }
+  .trx__receipt { width: 38px; height: 38px; }
+}
+
 .trx-groups { display: flex; flex-direction: column; gap: 16px; }
 .trx-group {
   background: var(--surface); border: 1px solid var(--border);
@@ -1456,7 +1473,11 @@ kbd {
   .topbar__cash { display: inline-flex; }
   .topbar__title h1 { font-size: .98rem; }
 
-  .view { padding: 16px 14px calc(96px + env(safe-area-inset-bottom)); }
+  /* Ruang bawah dibuat cukup tinggi supaya baris terakhir masih bisa
+     digulung melewati tombol mengambang — tanpa ini, tombol di ujung
+     kanan baris (misalnya cetak struk) bisa tertutup dan tidak bisa
+     ditekan sama sekali. */
+  .view { padding: 16px 14px calc(150px + env(safe-area-inset-bottom)); }
   .view-body { gap: 16px; }
   .bottomnav { display: flex; }
   .fab { display: block; }
