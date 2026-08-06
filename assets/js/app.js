@@ -34,7 +34,7 @@
 
       <aside class="sidebar">
         <div class="brand">
-          <span class="brand__mark">🍽️</span>
+          <span class="brand__mark" data-logo-mark>🍽️</span>
           <div class="brand__text">
             <strong class="brand__name" data-brand-name>${U.escapeHtml(st.profile.businessName || 'Dapur Kita')}</strong>
             <span class="brand__sub">Catatan Untung Rugi</span>
@@ -66,7 +66,7 @@
         <header class="topbar">
           <button type="button" class="icon-btn topbar__menu" data-act="open-nav" aria-label="Buka menu">${I.get('menu', 22)}</button>
           <div class="topbar__title">
-            <span class="topbar__brand-mark">🍽️</span>
+            <span class="topbar__brand-mark" data-logo-mark>🍽️</span>
             <div>
               <h1 data-page-title>Beranda</h1>
               <p data-page-date>${U.formatDateRelative(U.today())}</p>
@@ -187,8 +187,28 @@
   }
 
   /** Perbarui bagian kerangka yang bergantung pada data */
+  /**
+   * Pasang logo usaha (kalau ada) pada penanda merek dan ikon tab browser.
+   * Kalau belum diisi, ikon piring bawaan yang dipakai.
+   */
+  function applyLogo() {
+    const logo = S.get().profile.logo || '';
+    document.querySelectorAll('[data-logo-mark]').forEach(el => {
+      if (logo) {
+        el.innerHTML = '<img src="' + logo + '" alt="" class="brand__logo">';
+        el.classList.add('has-logo');
+      } else {
+        el.textContent = '🍽️';
+        el.classList.remove('has-logo');
+      }
+    });
+    const link = document.querySelector('link[rel="icon"]');
+    if (link && logo) link.href = logo;
+  }
+
   function refreshShell() {
     const st = S.get();
+    applyLogo();
     const name = document.querySelector('[data-brand-name]');
     if (name) name.textContent = st.profile.businessName || 'Dapur Kita';
     const cash = document.querySelector('[data-cash]');
@@ -334,7 +354,7 @@
     document.body.classList.remove('is-loading');
   }
 
-  global.App = { init, refreshShell, refreshCurrentView, checkOnboarding, NAV };
+  global.App = { init, refreshShell, refreshCurrentView, checkOnboarding, applyLogo, NAV };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

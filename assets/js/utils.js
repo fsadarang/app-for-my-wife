@@ -231,6 +231,47 @@
     return String(haystack || '').toLowerCase().includes(String(needle).toLowerCase());
   }
 
+  /**
+   * Baca berkas gambar lalu perkecil ke ukuran wajar sebelum disimpan.
+   * Foto dari kamera bisa berukuran beberapa MB — kalau disimpan apa
+   * adanya, penyimpanan browser cepat penuh dan berkas cadangan jadi
+   * berat. Hasilnya PNG (transparansi tetap terjaga).
+   * -> Promise<string> berisi data URI
+   */
+  function readImageResized(file, maxSize) {
+    const limit = maxSize || 256;
+    return new Promise((resolve, reject) => {
+      if (!file || !/^image\//.test(file.type)) {
+        reject(new Error('Berkas itu bukan gambar'));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Gambar tidak terbaca'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Gambar tidak terbaca'));
+        img.onload = () => {
+          const scale = Math.min(1, limit / Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, w, h);
+          try {
+            resolve(canvas.toDataURL('image/png'));
+          } catch (e) {
+            reject(new Error('Gambar tidak bisa diproses'));
+          }
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   /** Unduhan biasa lewat tautan sementara */
   function blobDownload(filename, content, mime) {
     const isText = typeof content === 'string';
@@ -294,6 +335,6 @@
     formatDate, formatDateFull, formatDateRelative,
     startOfMonth, endOfMonth, startOfWeek, monthLabel, monthKey, dateRangeList, greeting,
     uid, escapeHtml, debounce, sum, groupBy, deepClone, matches,
-    download, blobDownload, toCSV
+    download, blobDownload, toCSV, readImageResized
   };
 })(window);
