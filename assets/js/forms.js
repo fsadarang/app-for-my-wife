@@ -747,7 +747,9 @@
     const body = `
       <div class="receipt" id="receiptPrint">
         <div class="receipt__head">
-          <div class="receipt__logo">🍽️</div>
+          <div class="receipt__logo">${profile.logo
+            ? `<img src="${profile.logo}" alt="">`
+            : '🍽️'}</div>
           <h3>${U.escapeHtml(profile.businessName || 'Usaha Makanan')}</h3>
           <p>${U.formatDateFull(trx.date)} • ${trx.time || ''}</p>
           ${trx.customerName ? `<p class="receipt__customer">Pelanggan: <b>${U.escapeHtml(trx.customerName)}</b></p>` : ''}

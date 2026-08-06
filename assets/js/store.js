@@ -50,6 +50,7 @@
         ownerName: '',
         dailyTarget: 0,
         startingCash: 0,
+        logo: '',            // data URI logo usaha, kosong = pakai ikon bawaan
         startDate: U.today()
       },
       settings: {

@@ -52,6 +52,23 @@
                        value="${p.startingCash ? U.number(p.startingCash) : ''}"></div>
             </label>
           </div>
+          <div class="field">
+            <span class="field__label">Logo Usaha <span class="field__hint">opsional</span></span>
+            <div class="logo-setting">
+              <span class="logo-setting__preview${p.logo ? ' has-logo' : ''}" data-logo-preview>
+                ${p.logo ? `<img src="${p.logo}" alt="Logo usaha">` : '🍽️'}
+              </span>
+              <div class="logo-setting__actions">
+                <button type="button" class="btn btn--soft" data-act="pick-logo">
+                  ${I.get('upload', 18)} ${p.logo ? 'Ganti Logo' : 'Pilih Logo'}
+                </button>
+                ${p.logo ? `<button type="button" class="btn btn--ghost btn--danger-text" data-act="clear-logo">
+                  ${I.get('trash', 16)} Hapus</button>` : ''}
+                <p class="logo-setting__hint">Muncul di pojok aplikasi, di struk, dan jadi ikon di layar HP.</p>
+              </div>
+            </div>
+            <input type="file" accept="image/*" data-logo-input hidden>
+          </div>
           <p class="form__hint form__hint--muted">${I.get('info', 15)} Modal awal adalah uang yang sudah ada di kas sebelum kamu mulai mencatat. Dipakai untuk menghitung Saldo Kas di Beranda.</p>
           <div class="form__actions">
             <button type="submit" class="btn btn--primary">${I.get('save', 18)} Simpan Profil</button>
@@ -182,7 +199,7 @@
         </div>
       </section>
 
-      <p class="app-version">Dapur Kita • <b>versi 1.3</b> • dibuat dengan ❤️ untuk usaha makanan rumahan</p>`;
+      <p class="app-version">Dapur Kita • <b>versi 1.4</b> • dibuat dengan ❤️ untuk usaha makanan rumahan</p>`;
 
     bind(root);
   }
@@ -204,6 +221,43 @@
       });
       UI.toast('Profil usaha disimpan', 'success');
       global.App.refreshShell();
+    });
+
+    /* --- Logo usaha --- */
+    const logoInput = root.querySelector('[data-logo-input]');
+    root.querySelector('[data-act=pick-logo]').addEventListener('click', () => logoInput.click());
+
+    logoInput.addEventListener('change', async () => {
+      const file = logoInput.files && logoInput.files[0];
+      logoInput.value = '';
+      if (!file) return;
+      try {
+        // Diperkecil dulu supaya penyimpanan browser tidak cepat penuh
+        // dan berkas cadangan tetap ringan.
+        const dataUri = await U.readImageResized(file, 256);
+        S.updateProfile({ logo: dataUri });
+        UI.toast('Logo usaha tersimpan', 'success');
+        global.App.refreshShell();
+        render(root);
+      } catch (err) {
+        // Berkas keliru adalah hal yang wajar terjadi, bukan kerusakan aplikasi.
+        console.warn('Logo tidak bisa dipakai:', err.message);
+        UI.toast(err.message || 'Gambar tidak bisa dipakai. Coba berkas PNG atau JPG.', 'error', 6000);
+      }
+    });
+
+    const clearLogo = root.querySelector('[data-act=clear-logo]');
+    if (clearLogo) clearLogo.addEventListener('click', async () => {
+      const ok = await UI.confirm({
+        title: 'Hapus logo usaha?',
+        message: 'Aplikasi akan kembali memakai ikon piring bawaan.',
+        confirmText: 'Hapus logo'
+      });
+      if (!ok) return;
+      S.updateProfile({ logo: '' });
+      UI.toast('Logo dihapus', 'info');
+      global.App.refreshShell();
+      render(root);
     });
 
     root.querySelectorAll('[data-theme]').forEach(btn => btn.addEventListener('click', () => {
