@@ -1,0 +1,47 @@
+# Menerbitkan aplikasi ke GitHub Pages.
+#
+# Sebelumnya penerbitan mengandalkan alur bawaan GitHub yang dibuat
+# otomatis. Alur itu sempat tersangkut di antrean tanpa bisa dibatalkan,
+# sehingga pembaruan tidak pernah sampai ke situs. Dengan berkas ini,
+# prosesnya jadi milik repositori sendiri: bisa dijalankan manual, dan
+# run baru otomatis membatalkan run lama yang menggantung.
+
+name: Terbitkan ke GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # bisa dijalankan manual dari tab Actions
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true  # run baru membatalkan yang masih tersangkut
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Ambil kode
+        uses: actions/checkout@v4
+
+      - name: Siapkan Pages
+        uses: actions/configure-pages@v5
+
+      # Situs ini HTML/CSS/JS biasa, tidak perlu diproses Jekyll.
+      - name: Kemas berkas situs
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Terbitkan
+        id: deployment
+        uses: actions/deploy-pages@v4
