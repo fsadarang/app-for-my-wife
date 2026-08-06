@@ -326,6 +326,7 @@
       body: body,
       footer: `
         <button type="button" class="btn btn--ghost btn--danger-text" data-act="delete">${I.get('trash', 18)} Hapus</button>
+        <button type="button" class="btn btn--soft" data-act="receipt">${I.get('receipt', 18)} Struk</button>
         <span class="spacer"></span>
         <button type="button" class="btn btn--ghost" data-act="cancel">Tutup</button>
         <button type="submit" form="incomeEditForm" class="btn btn--primary">${I.get('save', 18)} Simpan</button>`,
@@ -419,6 +420,13 @@
         }));
 
         root.querySelector('[data-act=cancel]').addEventListener('click', () => handle.close());
+
+        // Struk dibuka dari data yang sudah tersimpan, bukan dari isian di
+        // layar ini — jadi yang tercetak selalu sama dengan yang tercatat.
+        root.querySelector('[data-act=receipt]').addEventListener('click', () => {
+          const fresh = S.getTransaction(trx.id) || trx;
+          receiptModal(fresh);
+        });
 
         root.querySelector('[data-act=delete]').addEventListener('click', async () => {
           const ok = await global.UI.confirm({
