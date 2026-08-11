@@ -739,6 +739,295 @@
     });
   }
 
+  /* ---------- Modal: Pre-Order ---------- */
+
+  /**
+   * Catat pesanan untuk tanggal mendatang.
+   * Nilainya belum masuk pemasukan — baru dihitung saat diselesaikan.
+   */
+  function preorderModal(existing, onDone) {
+    const isEdit = !!existing;
+    const items = existing ? U.deepClone(existing.items || []) : [];
+    const products = S.get().products.filter(p => p.active !== false);
+    let search = '';
+
+    const body = `
+      <form class="form" id="preorderForm" novalidate>
+        <div class="field-row">
+          <label class="field">
+            <span class="field__label">Nama Pemesan</span>
+            <input type="text" name="customerName" maxlength="60" autocomplete="off" data-autofocus
+                   placeholder="Misal: Bu Ani" value="${U.escapeHtml(existing ? existing.customerName : '')}">
+          </label>
+          <label class="field">
+            <span class="field__label">No. HP <span class="field__hint">opsional</span></span>
+            <input type="tel" name="phone" maxlength="25" autocomplete="off"
+                   placeholder="08xx" value="${U.escapeHtml(existing ? existing.phone : '')}">
+          </label>
+        </div>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field__label">Harus selesai tanggal</span>
+            <input type="date" name="dueDate" value="${existing ? existing.dueDate : U.addDays(U.today(), 1)}" max="2999-12-31">
+          </label>
+          <label class="field">
+            <span class="field__label">Jam <span class="field__hint">opsional</span></span>
+            <input type="time" name="dueTime" value="${existing ? existing.dueTime : ''}">
+          </label>
+        </div>
+        <div class="chip-row" data-due-quick>
+          <button type="button" class="chip chip--quick" data-due="0">Hari ini</button>
+          <button type="button" class="chip chip--quick" data-due="1">Besok</button>
+          <button type="button" class="chip chip--quick" data-due="2">Lusa</button>
+          <button type="button" class="chip chip--quick" data-due="7">Minggu depan</button>
+        </div>
+
+        <div class="field">
+          <span class="field__label">Pesanan</span>
+          <div class="po-items" data-po-items></div>
+        </div>
+
+        <div class="field">
+          <span class="field__label">Tambah menu <span class="field__hint">ketuk untuk menambah</span></span>
+          <div class="search search--sm">
+            ${I.get('search', 17, 'search__icon')}
+            <input type="search" id="poSearch" placeholder="Cari menu..." autocomplete="off">
+          </div>
+          <div class="po-picker" data-po-picker></div>
+        </div>
+
+        ${noteField(existing && existing.note, 'Misal: antar ke alamat, tidak pedas')}
+      </form>`;
+
+    global.UI.modal({
+      title: isEdit ? 'Ubah Pre-Order' : 'Pre-Order Baru',
+      subtitle: 'Pesanan untuk dikerjakan di tanggal mendatang',
+      icon: 'calendar',
+      size: 'md',
+      body: body,
+      footer: `
+        ${isEdit ? `<button type="button" class="btn btn--ghost btn--danger-text" data-act="delete">${I.get('trash', 18)} Hapus</button>` : ''}
+        <span class="spacer"></span>
+        <button type="button" class="btn btn--ghost" data-act="cancel">Batal</button>
+        <button type="submit" form="preorderForm" class="btn btn--primary" data-act="save">
+          ${I.get('save', 18)} Simpan
+        </button>`,
+      onMount: handle => {
+        const root = handle.root;
+        const form = root.querySelector('#preorderForm');
+        const itemsHost = root.querySelector('[data-po-items]');
+        const pickerHost = root.querySelector('[data-po-picker]');
+        const saveBtn = root.querySelector('[data-act=save]');
+
+        const total = () => U.sum(items, it => it.qty * it.price);
+
+        function renderItems() {
+          if (!items.length) {
+            itemsHost.innerHTML = `<p class="po-items__empty">${I.get('info', 15)} Belum ada menu. Pilih dari daftar di bawah.</p>`;
+          } else {
+            itemsHost.innerHTML = items.map((it, i) => `
+              <div class="po-item" data-i="${i}">
+                <span class="po-item__emoji">${it.emoji || '🍽️'}</span>
+                <div class="po-item__body">
+                  <p class="po-item__name">${U.escapeHtml(it.name)}</p>
+                  <p class="po-item__price">${U.rupiah(it.price)} × ${it.qty} = <b>${U.rupiah(it.price * it.qty)}</b></p>
+                </div>
+                <div class="stepper stepper--sm">
+                  <button type="button" class="stepper__btn" data-dec aria-label="Kurangi">${I.get('minus', 14)}</button>
+                  <span class="stepper__val">${it.qty}</span>
+                  <button type="button" class="stepper__btn" data-inc aria-label="Tambah">${I.get('plus', 14)}</button>
+                </div>
+                <button type="button" class="icon-btn" data-del aria-label="Hapus">${I.get('trash', 15)}</button>
+              </div>`).join('') +
+              `<div class="po-total"><span>Total pesanan</span><b>${U.rupiah(total())}</b></div>`;
+          }
+          saveBtn.disabled = items.length === 0;
+          saveBtn.classList.toggle('is-disabled', items.length === 0);
+
+          itemsHost.querySelectorAll('.po-item').forEach(node => {
+            const i = Number(node.dataset.i);
+            node.querySelector('[data-inc]').addEventListener('click', () => { items[i].qty += 1; renderItems(); renderPicker(); });
+            node.querySelector('[data-dec]').addEventListener('click', () => {
+              items[i].qty -= 1;
+              if (items[i].qty <= 0) items.splice(i, 1);
+              renderItems(); renderPicker();
+            });
+            node.querySelector('[data-del]').addEventListener('click', () => { items.splice(i, 1); renderItems(); renderPicker(); });
+          });
+        }
+
+        function renderPicker() {
+          const list = products.filter(p => U.matches(p.name, search) || U.matches(p.group, search));
+          if (!products.length) {
+            pickerHost.innerHTML = `<p class="po-items__empty">Belum ada menu. Tambahkan dulu di halaman Menu.</p>`;
+            return;
+          }
+          if (!list.length) {
+            pickerHost.innerHTML = `<p class="po-items__empty">Tidak ada menu cocok dengan "${U.escapeHtml(search)}".</p>`;
+            return;
+          }
+          pickerHost.innerHTML = list.map(p => {
+            const chosen = items.find(x => x.productId === p.id);
+            return `
+              <button type="button" class="po-pick${chosen ? ' is-chosen' : ''}" data-pick="${p.id}">
+                <span class="po-pick__emoji">${p.emoji || '🍽️'}</span>
+                <span class="po-pick__name">${U.escapeHtml(p.name)}</span>
+                <span class="po-pick__price">${U.rupiah(p.price)}</span>
+                ${chosen ? `<span class="po-pick__badge">${chosen.qty}</span>` : ''}
+              </button>`;
+          }).join('');
+          pickerHost.querySelectorAll('[data-pick]').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const p = S.getProduct(btn.dataset.pick);
+              if (!p) return;
+              const found = items.find(x => x.productId === p.id);
+              if (found) found.qty += 1;
+              else items.push({ productId: p.id, name: p.name, emoji: p.emoji, qty: 1, price: p.price, cost: p.cost, note: '' });
+              renderItems(); renderPicker();
+            });
+          });
+        }
+
+        const searchEl = root.querySelector('#poSearch');
+        searchEl.addEventListener('input', U.debounce(() => {
+          search = searchEl.value.trim();
+          renderPicker();
+        }, 150));
+
+        root.querySelectorAll('[data-due]').forEach(btn => btn.addEventListener('click', () => {
+          form.dueDate.value = U.addDays(U.today(), Number(btn.dataset.due));
+        }));
+
+        root.querySelector('[data-act=cancel]').addEventListener('click', () => handle.close());
+
+        const del = root.querySelector('[data-act=delete]');
+        if (del) del.addEventListener('click', async () => {
+          const ok = await global.UI.confirm({
+            title: 'Hapus pre-order?',
+            message: `Pesanan ${existing.customerName || 'ini'} akan dihapus dari daftar.`,
+            danger: true, confirmText: 'Hapus'
+          });
+          if (!ok) return;
+          const removed = S.removePreorder(existing.id);
+          handle.close();
+          global.UI.toast('Pre-order dihapus', 'info', 7000, {
+            label: 'Batalkan',
+            onClick: () => { S.restorePreorder(removed.item, removed.index); global.UI.toast('Dikembalikan', 'success'); }
+          });
+          if (onDone) onDone();
+        });
+
+        form.addEventListener('submit', e => {
+          e.preventDefault();
+          if (!items.length) { global.UI.toast('Pilih dulu menu yang dipesan', 'warn'); return; }
+          const data = {
+            customerName: form.customerName.value,
+            phone: form.phone.value,
+            dueDate: form.dueDate.value || U.addDays(U.today(), 1),
+            dueTime: form.dueTime.value,
+            note: form.note.value,
+            items: items
+          };
+          if (isEdit) {
+            S.updatePreorder(existing.id, data);
+            global.UI.toast('Pre-order diperbarui', 'success');
+          } else {
+            S.addPreorder(data);
+            global.UI.toast(`Pre-order untuk ${U.formatDateRelative(data.dueDate)} tersimpan`, 'success', 5000);
+          }
+          handle.close();
+          if (onDone) onDone();
+        });
+
+        renderItems();
+        renderPicker();
+      }
+    });
+  }
+
+  /** Selesaikan pre-order: barang diserahkan, uang diterima, jadi pemasukan */
+  function completePreorderModal(po, onDone) {
+    const body = `
+      <form class="form" id="completePoForm" novalidate>
+        <div class="po-confirm">
+          <p class="po-confirm__name">${I.get('users', 16)} ${U.escapeHtml(po.customerName || 'Tanpa nama')}</p>
+          <ul class="po-confirm__items">
+            ${(po.items || []).map(it => `<li>${it.emoji || '🍽️'} ${U.escapeHtml(it.name)} <b>×${it.qty}</b></li>`).join('')}
+          </ul>
+          <div class="po-confirm__total"><span>Total tagihan</span><b>${U.rupiah(po.total)}</b></div>
+        </div>
+        <p class="form__hint">${I.get('info', 16)} Setelah disimpan, nilainya baru masuk sebagai <b>pemasukan hari ini</b>.</p>
+        ${methodChips('tunai')}
+        <div class="cash-box-pay" data-cash-block>
+          <label class="field">
+            <span class="field__label">Uang yang diberikan <span class="field__hint">opsional</span></span>
+            <div class="amount-input">
+              <span class="amount-input__prefix">Rp</span>
+              <input type="text" id="poCash" inputmode="numeric" placeholder="0">
+            </div>
+          </label>
+          <div class="change-row" data-change-row>
+            <span>${I.get('coins', 15)} Kembalian</span>
+            <b data-change>–</b>
+          </div>
+        </div>
+      </form>`;
+
+    global.UI.modal({
+      title: 'Selesaikan Pre-Order',
+      subtitle: `Jatuh tempo ${U.formatDateRelative(po.dueDate)}`,
+      icon: 'check',
+      size: 'sm',
+      body: body,
+      footer: `<span class="spacer"></span>
+        <button type="button" class="btn btn--ghost" data-act="cancel">Batal</button>
+        <button type="submit" form="completePoForm" class="btn btn--income">${I.get('check', 18)} Selesai &amp; Catat</button>`,
+      onMount: handle => {
+        const root = handle.root;
+        const method = bindChips(root, '[data-methods] .chip--method', 'method');
+        const cashInput = root.querySelector('#poCash');
+        const cashBlock = root.querySelector('[data-cash-block]');
+        U.attachThousand(cashInput);
+
+        const refreshChange = () => {
+          const given = U.parseNumber(cashInput.value);
+          const diff = given - po.total;
+          const el = root.querySelector('[data-change]');
+          const row = root.querySelector('[data-change-row]');
+          el.textContent = given > 0 ? (diff < 0 ? 'Kurang ' + U.rupiah(Math.abs(diff)) : U.rupiah(diff)) : '–';
+          row.classList.toggle('is-short', given > 0 && diff < 0);
+          row.classList.toggle('is-ok', given > 0 && diff >= 0);
+        };
+        cashInput.addEventListener('input', refreshChange);
+        method.chips.forEach(chip => chip.addEventListener('click', () => {
+          const isCash = chip.dataset.method === 'tunai';
+          cashBlock.hidden = !isCash;
+          if (!isCash) { cashInput.value = ''; refreshChange(); }
+        }));
+
+        root.querySelector('[data-act=cancel]').addEventListener('click', () => handle.close());
+
+        root.querySelector('#completePoForm').addEventListener('submit', e => {
+          e.preventDefault();
+          const chosen = method.get() || 'tunai';
+          const given = chosen === 'tunai' ? U.parseNumber(cashInput.value) : 0;
+          if (given > 0 && given < po.total) {
+            global.UI.toast(`Uang yang diberikan kurang ${U.rupiah(po.total - given)}`, 'warn', 5000);
+            return;
+          }
+          const trx = S.completePreorder(po.id, { method: chosen, cashGiven: given });
+          handle.close();
+          global.UI.toast(`Pre-order selesai — ${U.rupiah(po.total)} masuk sebagai pemasukan`, 'success', 6000, {
+            label: 'Lihat Struk',
+            onClick: () => { if (trx) receiptModal(trx); }
+          });
+          if (onDone) onDone();
+        });
+      }
+    });
+  }
+
   /* ---------- Modal: Struk ---------- */
 
   function receiptModal(trx) {
@@ -809,7 +1098,7 @@
 
   global.Forms = {
     expenseModal, quickIncomeModal, incomeDetailModal,
-    productModal, categoryModal, receiptModal,
+    productModal, categoryModal, receiptModal, preorderModal, completePreorderModal,
     bindAmount, bindChips, amountField, dateTimeFields, methodChips, noteField
   };
 })(window);
