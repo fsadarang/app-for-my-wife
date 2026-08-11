@@ -6,7 +6,7 @@
 
   const U = global.Utils;
   const KEY = 'dapurku.data.v1';
-  const SCHEMA = 2;   // 2: pesanan per pelanggan (nama, uang dibayar, kembalian)
+  const SCHEMA = 3;   // 3: pre-order (pesanan untuk tanggal mendatang)
 
   /* ---------- Data bawaan ---------- */
 
@@ -61,6 +61,7 @@
       products: [],
       expenseCategories: U.deepClone(DEFAULT_EXPENSE_CATEGORIES),
       transactions: [],
+      preorders: [],
       meta: { createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
     };
   }
@@ -108,6 +109,8 @@
     s.meta = Object.assign(base.meta, data && data.meta);
     if (!Array.isArray(s.products)) s.products = [];
     if (!Array.isArray(s.transactions)) s.transactions = [];
+    // Skema 2 -> 3: catatan lama belum punya daftar pre-order.
+    if (!Array.isArray(s.preorders)) s.preorders = [];
     if (!Array.isArray(s.expenseCategories) || !s.expenseCategories.length) {
       s.expenseCategories = U.deepClone(DEFAULT_EXPENSE_CATEGORIES);
     }
@@ -395,6 +398,157 @@
 
   function getTransaction(id) {
     return state.transactions.find(x => x.id === id) || null;
+  }
+
+  /* ---------- Pre-order ---------- */
+
+  /**
+   * Pre-order = pesanan yang dibuat sekarang untuk diselesaikan pada
+   * tanggal lain.
+   *
+   * Penting: pre-order TIDAK dihitung sebagai pemasukan selama belum
+   * diselesaikan. Uangnya memang belum diterima, jadi kalau ikut dihitung,
+   * laporan laba dan saldo kas jadi salah. Nilainya baru masuk ke
+   * transaksi ketika ditandai selesai.
+   */
+  function addPreorder(data) {
+    const items = normalizeItems(data.items);
+    const po = {
+      id: U.uid('pre'),
+      customerName: (data.customerName || '').trim(),
+      phone: (data.phone || '').trim(),
+      items: items,
+      total: U.sum(items, it => it.qty * it.price),
+      hpp: U.sum(items, it => it.qty * it.cost),
+      dueDate: data.dueDate || U.addDays(U.today(), 1),
+      dueTime: data.dueTime || '',
+      note: (data.note || '').trim(),
+      status: 'menunggu',          // menunggu | selesai | batal
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+      transactionId: null          // diisi saat pre-order diselesaikan
+    };
+    state.preorders.push(po);
+    commit();
+    return po;
+  }
+
+  function updatePreorder(id, patch) {
+    const po = state.preorders.find(x => x.id === id);
+    if (!po) return null;
+    if (patch.customerName != null) po.customerName = String(patch.customerName).trim();
+    if (patch.phone != null) po.phone = String(patch.phone).trim();
+    if (patch.dueDate != null) po.dueDate = patch.dueDate;
+    if (patch.dueTime != null) po.dueTime = patch.dueTime;
+    if (patch.note != null) po.note = String(patch.note).trim();
+    if (patch.status != null) po.status = patch.status;
+    if (patch.items) {
+      po.items = normalizeItems(patch.items);
+      po.total = U.sum(po.items, it => it.qty * it.price);
+      po.hpp = U.sum(po.items, it => it.qty * it.cost);
+    }
+    commit();
+    return po;
+  }
+
+  function removePreorder(id) {
+    const i = state.preorders.findIndex(x => x.id === id);
+    if (i < 0) return null;
+    const [removed] = state.preorders.splice(i, 1);
+    commit();
+    return { item: removed, index: i };
+  }
+
+  function restorePreorder(item, index) {
+    if (!item) return;
+    const at = typeof index === 'number' ? U.clamp(index, 0, state.preorders.length) : state.preorders.length;
+    state.preorders.splice(at, 0, item);
+    commit();
+  }
+
+  function getPreorder(id) {
+    return state.preorders.find(x => x.id === id) || null;
+  }
+
+  /**
+   * Tandai pre-order selesai: barangnya diserahkan dan uangnya diterima.
+   * Barulah pada titik ini nilainya dicatat sebagai pemasukan.
+   */
+  function completePreorder(id, payment) {
+    const po = getPreorder(id);
+    if (!po || po.status === 'selesai') return null;
+    const pay = payment || {};
+    const trx = addIncome({
+      items: po.items,
+      customerName: po.customerName,
+      date: pay.date || U.today(),
+      time: pay.time || U.nowTime(),
+      method: pay.method || 'tunai',
+      cashGiven: pay.cashGiven || 0,
+      note: ('Pre-order' + (po.note ? ' — ' + po.note : '')).trim()
+    });
+    po.status = 'selesai';
+    po.completedAt = new Date().toISOString();
+    po.transactionId = trx.id;
+    commit();
+    return trx;
+  }
+
+  /** Batalkan penyelesaian: transaksi terkait ikut dihapus agar tidak dobel */
+  function reopenPreorder(id) {
+    const po = getPreorder(id);
+    if (!po) return null;
+    if (po.transactionId) removeTransaction(po.transactionId);
+    po.status = 'menunggu';
+    po.completedAt = null;
+    po.transactionId = null;
+    commit();
+    return po;
+  }
+
+  /** Pre-order yang belum selesai, diurutkan dari tenggat terdekat */
+  function pendingPreorders() {
+    return state.preorders
+      .filter(p => p.status === 'menunggu')
+      .sort((a, b) => (a.dueDate + (a.dueTime || '')).localeCompare(b.dueDate + (b.dueTime || '')));
+  }
+
+  /** Ringkasan untuk lencana dan kartu di Beranda */
+  function preorderSummary() {
+    const t = U.today();
+    const pending = pendingPreorders();
+    const late = pending.filter(p => p.dueDate < t);
+    const today = pending.filter(p => p.dueDate === t);
+    const tomorrow = pending.filter(p => p.dueDate === U.addDays(t, 1));
+    return {
+      pending, late, today, tomorrow,
+      pendingCount: pending.length,
+      lateCount: late.length,
+      todayCount: today.length,
+      tomorrowCount: tomorrow.length,
+      pendingValue: U.sum(pending, p => p.total),
+      pendingItems: U.sum(pending, p => U.sum(p.items || [], it => it.qty))
+    };
+  }
+
+  /**
+   * Rekap berapa porsi tiap menu yang harus disiapkan untuk suatu
+   * tanggal — inilah yang dipakai saat menyiapkan bahan.
+   */
+  function productionPlan(date) {
+    const map = new Map();
+    pendingPreorders()
+      .filter(p => (date ? p.dueDate === date : true))
+      .forEach(p => {
+        (p.items || []).forEach(it => {
+          const key = it.productId || ('nm:' + it.name);
+          if (!map.has(key)) map.set(key, { name: it.name, emoji: it.emoji, qty: 0, total: 0 });
+          const row = map.get(key);
+          row.qty += it.qty;
+          row.total += it.qty * it.price;
+        });
+      });
+    return Array.from(map.values()).sort((a, b) => b.qty - a.qty);
   }
 
   /* ---------- Query & ringkasan ---------- */
@@ -692,6 +846,8 @@
     productGroups, addProduct, updateProduct, removeProduct, getProduct,
     addCategory, updateCategory, removeCategory, getCategory,
     addIncome, addExpense, updateTransaction, removeTransaction, restoreTransaction, getTransaction,
+    addPreorder, updatePreorder, removePreorder, restorePreorder, getPreorder,
+    completePreorder, reopenPreorder, pendingPreorders, preorderSummary, productionPlan,
     inRange, sortedDesc, summary, cashBalance, dailySeries, topProducts,
     expenseByCategory, incomeByMethod, firstDate, customersByDay,
     seedProducts, seedDemoTransactions, hasDemoData, clearDemoData,

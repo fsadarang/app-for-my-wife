@@ -372,6 +372,22 @@ ${list.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxm
     return rows;
   }
 
+  /** Sheet Pre-Order: pesanan yang belum selesai beserta tenggatnya */
+  function preorderRows() {
+    const rows = [['Tenggat', 'Jam', 'Nama Pemesan', 'No. HP', 'Item', 'Jumlah',
+                   'Harga Satuan', 'Subtotal', 'Status', 'Catatan']];
+    (S().get().preorders || [])
+      .slice()
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+      .forEach(po => {
+        (po.items || []).forEach(it => {
+          rows.push([po.dueDate, po.dueTime || '', po.customerName || '', po.phone || '',
+            it.name, it.qty, it.price, it.qty * it.price, po.status, po.note || '']);
+        });
+      });
+    return rows;
+  }
+
   function summaryRows(list, title, rangeLabel) {
     const incomes = list.filter(t => t.type === 'income');
     const expenses = list.filter(t => t.type === 'expense');
@@ -415,6 +431,8 @@ ${list.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxm
       { name: 'Rincian Item', rows: itemRows(list), headerRows: 1 },
       { name: 'Pengeluaran', rows: expenseRows(list), headerRows: 1 }
     ];
+    const po = preorderRows();
+    if (po.length > 1) sheets.push({ name: 'Pre-Order', rows: po, headerRows: 1 });
     if (o.from && o.to) {
       sheets.push({ name: 'Peringkat Menu', rows: menuRows(o.from, o.to), headerRows: 1 });
     }
@@ -471,6 +489,6 @@ ${list.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxm
 
   global.Exporter = {
     buildXlsx, buildWorkbook, buildCSV, saveWorkbook, zip, crc32,
-    itemRows, orderRows, expenseRows, dailyRows, summaryRows, colName, safeSheetName
+    itemRows, orderRows, expenseRows, dailyRows, summaryRows, preorderRows, colName, safeSheetName
   };
 })(window);

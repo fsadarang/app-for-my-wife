@@ -1630,3 +1630,171 @@ kbd {
   .card, .report-card, .insight { box-shadow: none !important; break-inside: avoid; }
   .filters, .page-head__actions, .sidebar, .topbar, .bottomnav, .fab, .toast-stack { display: none !important; }
 }
+
+/* ---------- 14. Pre-Order ---------- */
+
+/* Lencana jumlah pesanan yang belum selesai */
+.nav__badge {
+  margin-left: auto; min-width: 20px; padding: 1px 7px;
+  border-radius: var(--r-full); background: var(--primary-soft); color: var(--primary);
+  font-size: .7rem; font-weight: 800; text-align: center;
+}
+.nav__badge.is-late { background: var(--expense-soft); color: var(--expense); }
+.nav__item.is-active .nav__badge { background: var(--surface); }
+.bottomnav__icon { position: relative; }
+.bottomnav__badge {
+  position: absolute; top: -2px; right: -4px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--primary); border: 2px solid var(--surface);
+}
+.bottomnav__badge.is-late { background: var(--expense); }
+
+.callout--late {
+  background: var(--expense-soft);
+  border-color: color-mix(in srgb, var(--expense) 40%, var(--border));
+}
+
+/* Kartu pesanan */
+.po-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.po-card {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 16px; border-radius: var(--r-lg);
+  background: var(--surface); border: 1px solid var(--border);
+  border-left: 4px solid var(--text-3); box-shadow: var(--shadow-sm);
+}
+.po-card--late { border-left-color: var(--expense); }
+.po-card--today { border-left-color: var(--primary); }
+.po-card--soon { border-left-color: var(--warn); }
+.po-card--later { border-left-color: var(--cash); }
+.po-card--done { border-left-color: var(--income); opacity: .72; }
+
+.po-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.po-card__who h3 { font-size: 1rem; }
+.po-card__phone {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: .74rem; color: var(--cash); font-weight: 600; margin-top: 2px;
+}
+.po-badge {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  padding: 3px 9px; border-radius: var(--r-full);
+  font-size: .71rem; font-weight: 700;
+  background: var(--surface-3); color: var(--text-2);
+}
+.po-badge--late { background: var(--expense-soft); color: var(--expense); }
+.po-badge--today { background: var(--primary-soft); color: var(--primary); }
+.po-badge--soon { background: var(--warn-soft); color: var(--warn); }
+.po-badge--later { background: var(--cash-soft); color: var(--cash); }
+.po-badge--done { background: var(--income-soft); color: var(--income); }
+
+.po-card__items { display: flex; flex-direction: column; gap: 3px; }
+.po-card__items li { font-size: .86rem; color: var(--text); }
+.po-card__qty { font-weight: 800; color: var(--primary); margin-right: 3px; }
+.po-card__meta {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  font-size: .75rem; color: var(--text-3);
+  border-top: 1px dashed var(--border); padding-top: 9px;
+}
+.po-card__meta span { display: inline-flex; align-items: center; gap: 5px; }
+.po-card__total { margin-left: auto; font-size: .95rem; font-weight: 800; color: var(--text); }
+.po-card__note {
+  display: flex; align-items: flex-start; gap: 6px;
+  font-size: .78rem; color: var(--text-2);
+  background: var(--surface-2); padding: 7px 10px; border-radius: var(--r-sm);
+}
+.po-card__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn--sm { padding: 7px 12px; font-size: .82rem; }
+.po-card__actions .btn { flex: 1; }
+
+/* Rekap porsi yang harus disiapkan */
+.plan {
+  padding: 14px; border-radius: var(--r-md);
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.plan__title { font-size: .88rem; margin-bottom: 9px; }
+.plan__list { display: flex; flex-direction: column; gap: 7px; }
+.plan__list li { display: flex; align-items: center; gap: 10px; font-size: .87rem; }
+.plan__qty {
+  min-width: 34px; padding: 2px 8px; border-radius: var(--r-sm);
+  background: var(--primary); color: var(--primary-contrast);
+  font-weight: 800; font-size: .82rem; text-align: center; flex: none;
+}
+.plan__empty { font-size: .8rem; color: var(--text-3); }
+
+/* Ringkasan pre-order di Beranda */
+.card--po { border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); }
+.po-warn {
+  display: flex; align-items: center; gap: 7px;
+  font-size: .82rem; font-weight: 600; color: var(--expense);
+  background: var(--expense-soft); padding: 8px 11px; border-radius: var(--r-sm);
+}
+.po-mini { display: flex; flex-direction: column; gap: 8px; }
+.po-mini__row { display: flex; align-items: center; gap: 10px; font-size: .85rem; }
+.po-mini__name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-mini__qty { color: var(--text-3); font-size: .78rem; white-space: nowrap; }
+
+/* Isian pre-order di dalam jendela */
+.po-items { display: flex; flex-direction: column; gap: 6px; }
+.po-items__empty {
+  display: flex; align-items: center; gap: 7px;
+  font-size: .8rem; color: var(--text-3);
+  padding: 12px; border: 1px dashed var(--border); border-radius: var(--r);
+}
+.po-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: var(--r); background: var(--surface-2);
+}
+.po-item__emoji { font-size: 1.2rem; flex: none; }
+.po-item__body { flex: 1; min-width: 0; }
+.po-item__name { font-size: .85rem; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-item__price { font-size: .73rem; color: var(--text-3); }
+.po-total {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; margin-top: 4px; border-radius: var(--r);
+  background: var(--primary-soft); font-size: .88rem; font-weight: 600; color: var(--text-2);
+}
+.po-total b { font-size: 1.1rem; font-weight: 800; color: var(--primary); }
+
+.po-picker {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 7px;
+  max-height: 210px; overflow-y: auto; padding: 2px;
+}
+.po-pick {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: 9px 11px; border-radius: var(--r); cursor: pointer; text-align: left;
+  background: var(--surface); border: 1px solid var(--border);
+  transition: border-color .15s, transform .12s var(--ease);
+}
+.po-pick:hover { border-color: var(--primary); transform: translateY(-1px); }
+.po-pick.is-chosen { border-color: var(--income); background: var(--income-soft); }
+.po-pick__emoji { font-size: 1.15rem; }
+.po-pick__name { font-size: .8rem; font-weight: 600; line-height: 1.25; }
+.po-pick__price { font-size: .74rem; color: var(--primary); font-weight: 700; }
+.po-pick__badge {
+  position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px;
+  display: grid; place-items: center; border-radius: var(--r-full);
+  background: var(--income); color: #fff; font-size: .7rem; font-weight: 800;
+}
+
+/* Konfirmasi penyelesaian */
+.po-confirm {
+  padding: 13px 15px; border-radius: var(--r-md);
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.po-confirm__name { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: .92rem; }
+.po-confirm__items { display: flex; flex-direction: column; gap: 3px; margin: 8px 0; }
+.po-confirm__items li { font-size: .84rem; color: var(--text-2); }
+.po-confirm__total {
+  display: flex; align-items: center; justify-content: space-between;
+  border-top: 1px dashed var(--border); padding-top: 8px; font-size: .88rem; color: var(--text-2);
+}
+.po-confirm__total b { font-size: 1.15rem; font-weight: 800; color: var(--income); }
+
+.btn.is-disabled, .btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.is-disabled:hover, .btn:disabled:hover { transform: none; }
+
+@media (max-width: 640px) {
+  .po-list { grid-template-columns: 1fr; }
+  /* Enam tab pada layar sempit: label diperkecil agar tetap terbaca */
+  .bottomnav__label { font-size: .6rem; letter-spacing: -.01em; }
+  .bottomnav__item { padding-left: 0; padding-right: 0; }
+}

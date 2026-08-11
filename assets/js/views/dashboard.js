@@ -110,6 +110,33 @@
         </div>
       </section>
 
+      ${(() => {
+        const po = S.preorderSummary();
+        if (!po.pendingCount) return '';
+        const soon = po.late.concat(po.today, po.tomorrow).slice(0, 4);
+        return `
+        <section class="card card--po">
+          <div class="card__head">
+            <div>
+              <h2 class="card__title">${I.get('calendar', 18)} Pre-Order Menunggu</h2>
+              <p class="card__sub">${po.pendingCount} pesanan • ${U.number(po.pendingItems)} porsi • ${U.rupiah(po.pendingValue)}</p>
+            </div>
+            <a class="link" href="#/preorder">Buka semua ${I.get('chevronRight', 14)}</a>
+          </div>
+          ${po.lateCount ? `<p class="po-warn">${I.get('alert', 15)} <b>${po.lateCount}</b> pesanan sudah lewat tenggat</p>` : ''}
+          ${soon.length ? `<ul class="po-mini">
+            ${soon.map(x => {
+              const d = global.Views.preorderDueInfo(x.dueDate);
+              return `<li class="po-mini__row">
+                <span class="po-badge po-badge--${d.tone}">${d.label}</span>
+                <span class="po-mini__name">${U.escapeHtml(x.customerName || 'Tanpa nama')}</span>
+                <span class="po-mini__qty">${U.number(U.sum(x.items || [], it => it.qty))} porsi</span>
+              </li>`;
+            }).join('')}
+          </ul>` : `<p class="card__sub">Pesanan terdekat masih beberapa hari lagi.</p>`}
+        </section>`;
+      })()}
+
       <div class="grid grid--2-1">
         <section class="card">
           <div class="card__head">

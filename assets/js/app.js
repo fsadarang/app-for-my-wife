@@ -9,6 +9,7 @@
   const NAV = [
     { path: 'dashboard', label: 'Beranda', icon: 'home', bottom: true },
     { path: 'kasir', label: 'Kasir', icon: 'cart', bottom: true },
+    { path: 'preorder', label: 'Pre-Order', icon: 'calendar', bottom: true },
     { path: 'transaksi', label: 'Transaksi', icon: 'receipt', bottom: true },
     { path: 'laporan', label: 'Laporan', icon: 'chart', bottom: true },
     { path: 'menu', label: 'Menu', icon: 'book', bottom: true },
@@ -16,7 +17,7 @@
   ];
 
   const TITLES = {
-    dashboard: 'Beranda', kasir: 'Kasir', transaksi: 'Transaksi',
+    dashboard: 'Beranda', kasir: 'Kasir', preorder: 'Pre-Order', transaksi: 'Transaksi',
     laporan: 'Laporan', menu: 'Menu & Kategori', pengaturan: 'Pengaturan'
   };
 
@@ -46,6 +47,7 @@
             <a class="nav__item" href="#/${n.path}" data-nav="${n.path}">
               <span class="nav__icon">${I.get(n.icon, 20)}</span>
               <span class="nav__label">${n.label}</span>
+              ${n.path === 'preorder' ? '<span class="nav__badge" data-po-badge hidden></span>' : ''}
               <span class="nav__marker"></span>
             </a>`).join('')}
         </nav>
@@ -106,7 +108,7 @@
       <nav class="bottomnav" aria-label="Navigasi bawah">
         ${NAV.filter(n => n.bottom).map(n => `
           <a class="bottomnav__item" href="#/${n.path}" data-nav="${n.path}">
-            <span class="bottomnav__icon">${I.get(n.icon, 21)}</span>
+            <span class="bottomnav__icon">${I.get(n.icon, 21)}${n.path === 'preorder' ? '<i class="bottomnav__badge" data-po-badge hidden></i>' : ''}</span>
             <span class="bottomnav__label">${n.label}</span>
           </a>`).join('')}
       </nav>`;
@@ -206,9 +208,21 @@
     if (link && logo) link.href = logo;
   }
 
+  /** Lencana: berapa pre-order yang belum selesai (yang lewat tenggat ditandai) */
+  function refreshPreorderBadge() {
+    const sum = S.preorderSummary();
+    document.querySelectorAll('[data-po-badge]').forEach(el => {
+      el.hidden = sum.pendingCount === 0;
+      el.textContent = el.tagName === 'I' ? '' : String(sum.pendingCount);
+      el.classList.toggle('is-late', sum.lateCount > 0);
+      el.title = sum.pendingCount + ' pre-order belum selesai';
+    });
+  }
+
   function refreshShell() {
     const st = S.get();
     applyLogo();
+    refreshPreorderBadge();
     const name = document.querySelector('[data-brand-name]');
     if (name) name.textContent = st.profile.businessName || 'Dapur Kita';
     const cash = document.querySelector('[data-cash]');
@@ -305,7 +319,7 @@
       if (key === '?') { e.preventDefault(); UI.navigate('pengaturan'); return; }
 
       const num = parseInt(e.key, 10);
-      if (num >= 1 && num <= 5) {
+      if (num >= 1 && num <= 6) {
         e.preventDefault();
         UI.navigate(NAV[num - 1].path);
       }
@@ -354,7 +368,7 @@
     document.body.classList.remove('is-loading');
   }
 
-  global.App = { init, refreshShell, refreshCurrentView, checkOnboarding, applyLogo, NAV };
+  global.App = { init, refreshShell, refreshCurrentView, checkOnboarding, applyLogo, refreshPreorderBadge, NAV };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
