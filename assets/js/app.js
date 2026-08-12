@@ -351,8 +351,29 @@
     bindShortcuts();
     checkOnboarding();
 
-    // Simpan data sebelum halaman ditutup, jaga-jaga ada perubahan tertunda.
-    window.addEventListener('beforeunload', () => S.persist());
+    // Jaring pengaman saat aplikasi ditinggalkan.
+    //
+    // Di ponsel, `beforeunload` sering TIDAK dijalankan ketika layar dikunci,
+    // pengguna berpindah aplikasi, atau tab dibuang peramban karena memori
+    // menipis. Yang dapat diandalkan adalah `visibilitychange` dan `pagehide`,
+    // jadi ketiganya dipasang sekaligus.
+    const flush = () => { try { S.persist(); } catch (e) { console.error(e); } };
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flush();
+    });
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', flush);
+
+    // Kalau aplikasi terbuka di tab/jendela lain dan menyimpan sesuatu,
+    // salinan ini ikut menyusul supaya tidak saling menimpa.
+    window.addEventListener('storage', e => {
+      if (e.key !== S.KEY) return;
+      if (S.reloadFromStorage()) {
+        refreshShell();
+        refreshCurrentView();
+        UI.toast('Ada catatan baru dari jendela lain — tampilan diperbarui', 'info', 4000);
+      }
+    });
 
     // Ingatkan sekali saja saat meninggalkan Kasir dengan pesanan yang belum disimpan.
     let lastPath = UI.parseHash().path;
