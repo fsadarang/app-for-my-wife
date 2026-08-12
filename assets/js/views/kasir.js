@@ -564,6 +564,18 @@
       cashGiven: payMethod === 'tunai' ? cashGiven : 0
     });
 
+    // Pastikan penjualannya benar-benar sampai ke penyimpanan sebelum
+    // layar dibersihkan. Kalau gagal, pesanannya tetap dipertahankan
+    // supaya bisa dicoba lagi — jangan sampai hilang tanpa jejak.
+    if (!S.isStored(trx.id)) {
+      S.persist();
+      if (!S.isStored(trx.id)) {
+        S.removeTransaction(trx.id);
+        UI.toast('PENJUALAN BELUM TERSIMPAN. Pesanan masih ada di layar — coba tekan Simpan sekali lagi.', 'error', 15000);
+        return;
+      }
+    }
+
     const savedChange = trx.change;
     const savedName = trx.customerName;
     cart = []; discount = 0; saleDate = U.today(); customerName = ''; cashGiven = 0;

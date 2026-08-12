@@ -199,7 +199,7 @@
         </div>
       </section>
 
-      <p class="app-version">Dapur Kita • <b>versi 1.5</b> • dibuat dengan ❤️ untuk usaha makanan rumahan</p>`;
+      <p class="app-version">Dapur Kita • <b>versi 1.6</b> • dibuat dengan ❤️ untuk usaha makanan rumahan</p>`;
 
     bind(root);
   }

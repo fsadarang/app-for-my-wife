@@ -70,36 +70,40 @@
 
   let state = defaultState();
   const listeners = new Set();
-  let saveTimer = null;
   let storageOK = true;
 
-  // Bila data yang tersimpan gagal dibaca, penyimpanan dikunci. Tanpa ini,
-  // keadaan kosong hasil gagal-baca bisa menimpa catatan asli yang masih ada
-  // di perangkat — dan itu tidak bisa dikembalikan.
-  let loadFailed = false;
+  // Cap waktu tulisan terakhir yang kita ketahui. Dipakai untuk mengenali
+  // kalau tab/jendela lain sempat menyimpan sesuatu di belakang kita.
+  let lastSeenAt = null;
 
   function load() {
+    let raw = null;
     try {
-      const raw = localStorage.getItem(KEY);
+      raw = localStorage.getItem(KEY);
       if (!raw) return false;
       const parsed = JSON.parse(raw);
       state = migrate(parsed);
-      loadFailed = false;
+      lastSeenAt = (parsed.meta && parsed.meta.updatedAt) || null;
       return true;
     } catch (e) {
       console.error('Gagal memuat data tersimpan:', e);
-      loadFailed = true;
+
+      // Data yang tidak terbaca disalin dulu ke kunci terpisah supaya masih
+      // bisa diselamatkan, baru aplikasi dilanjutkan. Sebelumnya penyimpanan
+      // dikunci total di titik ini — akibatnya seluruh pencatatan berikutnya
+      // gagal diam-diam padahal layar tetap bilang "tersimpan".
+      try {
+        if (raw) localStorage.setItem(KEY + '.rusak.' + Date.now(), raw);
+      } catch (_) { /* penyimpanan penuh, tidak ada yang bisa dilakukan */ }
+
       setTimeout(() => {
         if (global.UI && global.UI.toast) {
-          global.UI.toast('Data tersimpan tidak terbaca. Penyimpanan dikunci sementara agar catatan lamamu tidak tertimpa — pulihkan lewat cadangan.', 'error', 12000);
+          global.UI.toast('Data lama tidak terbaca dan sudah diamankan ke salinan terpisah. Aplikasi tetap bisa dipakai — pulihkan dari cadangan bila catatanmu hilang.', 'error', 15000);
         }
       }, 800);
       return false;
     }
   }
-
-  /** Buka kunci setelah pengguna sengaja mengganti data (pulihkan / reset) */
-  function unlockStorage() { loadFailed = false; }
 
   function migrate(data) {
     const base = defaultState();
@@ -132,25 +136,106 @@
     return s;
   }
 
+  /**
+   * Satukan catatan dari tab/jendela lain sebelum menimpa.
+   *
+   * Aplikasi bisa terbuka lebih dari satu tempat sekaligus (mis. ikon di
+   * layar utama dan tab browser). Tiap salinan memegang datanya sendiri di
+   * memori, jadi kalau langsung menimpa, penjualan yang baru dicatat di
+   * salinan lain akan hilang begitu saja.
+   *
+   * Penggabungan memakai aturan gabungan-berdasarkan-id: catatan yang ada
+   * di penyimpanan tapi tidak ada di memori akan ditambahkan kembali.
+   * Untuk buku penjualan, kelebihan satu catatan jauh lebih ringan
+   * akibatnya daripada kehilangan penjualan sungguhan.
+   */
+  function mergeById(mine, theirs) {
+    if (!Array.isArray(mine) || !Array.isArray(theirs)) return 0;
+    const known = new Set(mine.map(x => x && x.id));
+    let added = 0;
+    theirs.forEach(x => {
+      if (x && x.id && !known.has(x.id)) { mine.push(x); added++; }
+    });
+    return added;
+  }
+
+  function mergeExternalChanges() {
+    let raw;
+    try { raw = localStorage.getItem(KEY); } catch (e) { return 0; }
+    if (!raw) return 0;
+    let other;
+    try { other = JSON.parse(raw); } catch (e) { return 0; }
+    const otherAt = other && other.meta && other.meta.updatedAt;
+    // Hanya digabung bila penyimpanan memang lebih baru daripada yang
+    // terakhir kita baca/tulis sendiri.
+    if (!otherAt || (lastSeenAt && otherAt <= lastSeenAt)) return 0;
+    const added = mergeById(state.transactions, other.transactions) +
+      mergeById(state.preorders, other.preorders) +
+      mergeById(state.products, other.products) +
+      mergeById(state.expenseCategories, other.expenseCategories);
+    lastSeenAt = otherAt;
+    return added;
+  }
+
+  /**
+   * Tulis ke penyimpanan lalu PASTIKAN benar-benar tersimpan.
+   * Mengembalikan true hanya kalau datanya terbukti sudah ada di
+   * penyimpanan — supaya aplikasi tidak pernah bilang "tersimpan"
+   * untuk sesuatu yang sebenarnya gagal.
+   */
   function persist() {
-    if (loadFailed) return;   // jangan timpa data yang belum sempat dibaca
     try {
+      mergeExternalChanges();
       state.meta.updatedAt = new Date().toISOString();
-      localStorage.setItem(KEY, JSON.stringify(state));
+      const payload = JSON.stringify(state);
+      localStorage.setItem(KEY, payload);
+
+      // Baca ulang: pada beberapa peramban ponsel, penulisan bisa gagal
+      // atau dibuang tanpa melempar galat apa pun.
+      if (localStorage.getItem(KEY) !== payload) {
+        throw new Error('Data tidak ditemukan lagi setelah disimpan');
+      }
+      lastSeenAt = state.meta.updatedAt;
       storageOK = true;
+      return true;
     } catch (e) {
       storageOK = false;
       console.error('Gagal menyimpan data:', e);
       if (global.UI && global.UI.toast) {
-        global.UI.toast('Data gagal disimpan di perangkat ini. Coba backup manual lewat menu Pengaturan.', 'error', 6000);
+        global.UI.toast('PENTING: catatan gagal disimpan di perangkat ini. Jangan tutup aplikasi — buka Pengaturan lalu Simpan Cadangan sekarang.', 'error', 15000);
       }
+      return false;
     }
   }
 
+  /**
+   * Menyimpan langsung, tanpa ditunda.
+   *
+   * Sebelumnya penulisan ditunda 120 milidetik. Di ponsel, penundaan itu
+   * bisa tidak pernah dijalankan bila layar dikunci, aplikasi berpindah,
+   * atau tab dibuang peramban karena memori menipis — sehingga penjualan
+   * yang sudah dikonfirmasi ke layar tidak pernah sampai ke penyimpanan.
+   */
   function commit(silent) {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(persist, 120);
+    const ok = persist();
     if (!silent) emit();
+    return ok;
+  }
+
+  /** Pastikan sebuah catatan benar-benar ada di penyimpanan */
+  function isStored(id) {
+    if (!id) return false;
+    try {
+      const raw = localStorage.getItem(KEY);
+      return !!raw && raw.indexOf('"' + id + '"') >= 0;
+    } catch (e) { return false; }
+  }
+
+  /** Dipanggil saat tab lain mengubah data, agar tampilan ikut menyusul */
+  function reloadFromStorage() {
+    const added = mergeExternalChanges();
+    if (added) emit();
+    return added;
   }
 
   function emit() {
@@ -812,7 +897,6 @@
   }
 
   function resetAll() {
-    unlockStorage();
     state = defaultState();
     state.settings.onboarded = false;
     commit();
@@ -832,7 +916,6 @@
     if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.transactions)) {
       throw new Error('Format file tidak dikenali.');
     }
-    unlockStorage();
     state = migrate(parsed);
     state.settings.onboarded = true;
     commit();
@@ -841,7 +924,7 @@
 
   global.Store = {
     KEY, SCHEMA, PAYMENT_METHODS, DEFAULT_EXPENSE_CATEGORIES,
-    load, get, subscribe, commit, persist, isStorageOK, unlockStorage,
+    load, get, subscribe, commit, persist, isStorageOK, isStored, reloadFromStorage,
     updateProfile, updateSettings,
     productGroups, addProduct, updateProduct, removeProduct, getProduct,
     addCategory, updateCategory, removeCategory, getCategory,
