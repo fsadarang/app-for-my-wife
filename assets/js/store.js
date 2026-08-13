@@ -6,7 +6,8 @@
 
   const U = global.Utils;
   const KEY = 'dapurku.data.v1';
-  const SCHEMA = 3;   // 3: pre-order (pesanan untuk tanggal mendatang)
+  const SCHEMA = 4;   // 4: stok harian per varian menu
+  const LOW_STOCK = 5;   // sisa segini atau kurang dianggap "menipis"
 
   /* ---------- Data bawaan ---------- */
 
@@ -62,6 +63,7 @@
       expenseCategories: U.deepClone(DEFAULT_EXPENSE_CATEGORIES),
       transactions: [],
       preorders: [],
+      stocks: [],
       meta: { createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
     };
   }
@@ -115,6 +117,8 @@
     if (!Array.isArray(s.transactions)) s.transactions = [];
     // Skema 2 -> 3: catatan lama belum punya daftar pre-order.
     if (!Array.isArray(s.preorders)) s.preorders = [];
+    // Skema 3 -> 4: catatan lama belum punya catatan stok harian.
+    if (!Array.isArray(s.stocks)) s.stocks = [];
     if (!Array.isArray(s.expenseCategories) || !s.expenseCategories.length) {
       s.expenseCategories = U.deepClone(DEFAULT_EXPENSE_CATEGORIES);
     }
@@ -171,6 +175,7 @@
     if (!otherAt || (lastSeenAt && otherAt <= lastSeenAt)) return 0;
     const added = mergeById(state.transactions, other.transactions) +
       mergeById(state.preorders, other.preorders) +
+      mergeById(state.stocks, other.stocks) +
       mergeById(state.products, other.products) +
       mergeById(state.expenseCategories, other.expenseCategories);
     lastSeenAt = otherAt;
@@ -636,6 +641,182 @@
     return Array.from(map.values()).sort((a, b) => b.qty - a.qty);
   }
 
+  /* ---------- Stok harian per varian ---------- */
+
+  /**
+   * Stok dicatat sebagai daftar penambahan, bukan satu angka tunggal.
+   * Sekali goreng 50 pcs -> satu catatan 50. Nambah 20 lagi -> catatan
+   * baru 20. Jumlah yang dibuat hari itu = penjumlahan semua catatan.
+   *
+   * Cara ini dipilih supaya riwayat penambahan tetap kelihatan dan
+   * koreksi cukup dicatat sebagai angka negatif — tidak ada angka yang
+   * ditimpa diam-diam.
+   */
+  function stockEntries(date, productId) {
+    return state.stocks
+      .filter(s => (!date || s.date === date) && (!productId || s.productId === productId))
+      .sort((a, b) => ((a.createdAt || '') < (b.createdAt || '') ? -1 : 1));
+  }
+
+  /** Total yang dibuat untuk satu menu pada satu tanggal */
+  function stockMade(productId, date) {
+    const d = date || U.today();
+    return U.sum(state.stocks.filter(s => s.productId === productId && s.date === d), s => s.qty);
+  }
+
+  /** Sudah pernah diatur atau belum — beda arti dengan "dibuat = 0" */
+  function hasStockRecord(productId, date) {
+    const d = date || U.today();
+    return state.stocks.some(s => s.productId === productId && s.date === d);
+  }
+
+  function addStockEntry(data) {
+    const qty = Math.round(Number(data.qty) || 0);
+    // qty 0 tetap diterima: itulah cara menandai "hari ini menu ini
+    // sengaja tidak dibuat", yang berbeda artinya dari "belum diisi".
+    if (!data.productId) return null;
+    const s = {
+      id: U.uid('stk'),
+      productId: data.productId,
+      date: data.date || U.today(),
+      qty: qty,                       // boleh negatif untuk koreksi
+      note: (data.note || '').trim(),
+      createdAt: new Date().toISOString()
+    };
+    state.stocks.push(s);
+    commit();
+    return s;
+  }
+
+  /**
+   * Setel jumlah yang dibuat menjadi angka tertentu. Yang disimpan tetap
+   * selisihnya, jadi catatan penambahan sebelumnya tidak hilang.
+   */
+  function setStockMade(productId, date, total, note) {
+    const d = date || U.today();
+    const target = Math.max(0, Math.round(Number(total) || 0));
+    const delta = target - stockMade(productId, d);
+    // Tidak ada perubahan pada menu yang memang sudah diatur: jangan
+    // tambah catatan kosong. Tapi menetapkan 0 pada menu yang belum
+    // pernah diatur tetap dicatat, supaya statusnya jelas.
+    if (!delta && hasStockRecord(productId, d)) return null;
+    return addStockEntry({ productId: productId, date: d, qty: delta, note: note });
+  }
+
+  function removeStockEntry(id) {
+    const i = state.stocks.findIndex(x => x.id === id);
+    if (i < 0) return null;
+    const [removed] = state.stocks.splice(i, 1);
+    commit();
+    return { item: removed, index: i };
+  }
+
+  function restoreStockEntry(item, index) {
+    if (!item) return;
+    const at = typeof index === 'number' ? U.clamp(index, 0, state.stocks.length) : state.stocks.length;
+    state.stocks.splice(at, 0, item);
+    commit();
+  }
+
+  /**
+   * Gambaran stok satu hari untuk tiap varian:
+   *   dibuat  = total yang disiapkan hari itu
+   *   terjual = yang sudah laku (transaksi pemasukan tanggal itu)
+   *   dikeep  = disisihkan untuk pre-order yang jatuh tempo tanggal itu
+   *   sisa    = dibuat - terjual - dikeep, yaitu yang masih boleh dijual
+   *
+   * "diatur" dibedakan dari "dibuat = 0" supaya tampilan bisa bilang
+   * "belum diatur" alih-alih memajang angka nol yang menyesatkan.
+   */
+  function stockOverview(date) {
+    const d = date || U.today();
+    const rows = new Map();
+    const byName = new Map();
+
+    state.products.forEach(p => {
+      rows.set(p.id, {
+        productId: p.id,
+        name: p.name,
+        emoji: p.emoji,
+        group: p.group || '',
+        price: p.price || 0,
+        active: p.active !== false,
+        hilang: false,
+        dibuat: 0, terjual: 0, dikeep: 0, sisa: 0, diatur: false
+      });
+      byName.set(String(p.name || '').trim().toLowerCase(), p.id);
+    });
+
+    // Item lama bisa saja tidak punya productId, atau menunya sudah
+    // dihapus. Angkanya tetap harus kelihatan, bukan hilang diam-diam.
+    function rowFor(item) {
+      let id = item.productId;
+      if (!id || !rows.has(id)) id = byName.get(String(item.name || '').trim().toLowerCase()) || null;
+      if (id && rows.has(id)) return rows.get(id);
+      const key = 'nm:' + String(item.name || 'Item').trim().toLowerCase();
+      if (!rows.has(key)) {
+        rows.set(key, {
+          productId: null,
+          name: item.name || 'Item',
+          emoji: item.emoji || '🍽️',
+          group: '',
+          price: item.price || 0,
+          active: false,
+          hilang: true,
+          dibuat: 0, terjual: 0, dikeep: 0, sisa: 0, diatur: false
+        });
+      }
+      return rows.get(key);
+    }
+
+    state.stocks.forEach(s => {
+      if (s.date !== d) return;
+      const row = rows.get(s.productId);
+      if (!row) return;                 // menunya sudah dihapus
+      row.dibuat += s.qty;
+      row.diatur = true;
+    });
+
+    state.transactions.forEach(t => {
+      if (t.type !== 'income' || t.date !== d) return;
+      (t.items || []).forEach(it => { rowFor(it).terjual += it.qty; });
+    });
+
+    state.preorders.forEach(p => {
+      if (p.status !== 'menunggu' || p.dueDate !== d) return;
+      (p.items || []).forEach(it => { rowFor(it).dikeep += it.qty; });
+    });
+
+    return Array.from(rows.values())
+      .map(r => { r.sisa = r.dibuat - r.terjual - r.dikeep; return r; })
+      .sort((a, b) => {
+        if (a.active !== b.active) return a.active ? -1 : 1;
+        if (a.group !== b.group) return String(a.group).localeCompare(String(b.group));
+        return String(a.name).localeCompare(String(b.name));
+      });
+  }
+
+  /** Ringkasan stok untuk kartu Beranda dan lencana */
+  function stockSummary(date) {
+    const d = date || U.today();
+    const rows = stockOverview(d).filter(r => r.active || r.diatur || r.terjual || r.dikeep);
+    const diatur = rows.filter(r => r.diatur);
+    return {
+      date: d,
+      rows: rows,
+      diatur: diatur,
+      diaturCount: diatur.length,
+      dibuat: U.sum(rows, r => r.dibuat),
+      terjual: U.sum(rows, r => r.terjual),
+      dikeep: U.sum(rows, r => r.dikeep),
+      // Sisa hanya dijumlahkan dari menu yang stoknya memang diatur,
+      // supaya penjualan menu tanpa catatan stok tidak bikin angka minus.
+      sisa: U.sum(diatur, r => r.sisa),
+      habis: diatur.filter(r => r.sisa <= 0).length,
+      menipis: diatur.filter(r => r.sisa > 0 && r.sisa <= LOW_STOCK).length
+    };
+  }
+
   /* ---------- Query & ringkasan ---------- */
 
   function inRange(from, to) {
@@ -904,6 +1085,9 @@
 
   function clearTransactions() {
     state.transactions = [];
+    // Catatan stok ikut dibersihkan: tanpa transaksinya, angka
+    // "dibuat 70, terjual 0" hanya akan membingungkan.
+    state.stocks = [];
     commit();
   }
 
@@ -923,7 +1107,7 @@
   }
 
   global.Store = {
-    KEY, SCHEMA, PAYMENT_METHODS, DEFAULT_EXPENSE_CATEGORIES,
+    KEY, SCHEMA, LOW_STOCK, PAYMENT_METHODS, DEFAULT_EXPENSE_CATEGORIES,
     load, get, subscribe, commit, persist, isStorageOK, isStored, reloadFromStorage,
     updateProfile, updateSettings,
     productGroups, addProduct, updateProduct, removeProduct, getProduct,
@@ -931,6 +1115,8 @@
     addIncome, addExpense, updateTransaction, removeTransaction, restoreTransaction, getTransaction,
     addPreorder, updatePreorder, removePreorder, restorePreorder, getPreorder,
     completePreorder, reopenPreorder, pendingPreorders, preorderSummary, productionPlan,
+    stockEntries, stockMade, hasStockRecord, addStockEntry, setStockMade,
+    removeStockEntry, restoreStockEntry, stockOverview, stockSummary,
     inRange, sortedDesc, summary, cashBalance, dailySeries, topProducts,
     expenseByCategory, incomeByMethod, firstDate, customersByDay,
     seedProducts, seedDemoTransactions, hasDemoData, clearDemoData,

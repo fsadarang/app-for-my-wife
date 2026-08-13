@@ -632,6 +632,169 @@
     });
   }
 
+  /* ---------- Modal: Stok Harian ---------- */
+
+  /**
+   * Atur berapa porsi satu menu yang tersedia pada satu tanggal.
+   *
+   * Angka pada kotak isian adalah TOTAL yang dibuat hari itu. Yang
+   * disimpan hanya selisihnya, jadi menambah 20 porsi sore hari tetap
+   * tercatat sebagai penambahan tersendiri dan riwayatnya kelihatan.
+   */
+  function stockModal(product, date, onDone) {
+    const d = date || U.today();
+    const chip = [5, 10, 20, 25, 50];
+
+    function stats() {
+      const row = S.stockOverview(d).find(r => r.productId === product.id);
+      return row || { dibuat: 0, terjual: 0, dikeep: 0, sisa: 0, diatur: false };
+    }
+
+    const start = stats();
+
+    const body = `
+      <form class="form" id="stockForm" novalidate>
+        <div class="stock-head">
+          <span class="stock-head__emoji">${product.emoji || '🍽️'}</span>
+          <div class="stock-head__body">
+            <strong class="stock-head__name">${U.escapeHtml(product.name)}</strong>
+            <span class="stock-head__date">${I.get('calendar', 13)} ${U.formatDateRelative(d)}</span>
+          </div>
+        </div>
+
+        <label class="field">
+          <span class="field__label">Jumlah yang dibuat <span class="field__hint">porsi / pcs</span></span>
+          <div class="stock-input">
+            <button type="button" class="stock-input__btn" data-step="-1" aria-label="Kurangi satu">${I.get('minus', 18)}</button>
+            <input type="number" id="stockQty" inputmode="numeric" min="0" step="1" value="${start.dibuat}" data-autofocus aria-label="Jumlah yang dibuat">
+            <button type="button" class="stock-input__btn" data-step="1" aria-label="Tambah satu">${I.get('plus', 18)}</button>
+          </div>
+        </label>
+
+        <div class="chip-row chip-row--quick">
+          ${chip.map(n => `<button type="button" class="chip chip--quick" data-add="${n}">${I.get('plus', 13)} ${n}</button>`).join('')}
+        </div>
+
+        <div class="stock-preview" data-preview></div>
+
+        <label class="field">
+          <span class="field__label">Catatan <span class="field__hint">opsional</span></span>
+          <input type="text" name="note" maxlength="60" autocomplete="off" placeholder="Misal: gorengan kedua">
+        </label>
+
+        <div data-history></div>
+      </form>`;
+
+    global.UI.modal({
+      title: 'Atur Stok',
+      subtitle: 'Berapa yang tersedia untuk dijual',
+      icon: 'package',
+      size: 'md',
+      body: body,
+      footer: `<span class="spacer"></span>
+        <button type="button" class="btn btn--ghost" data-act="cancel">Batal</button>
+        <button type="submit" form="stockForm" class="btn btn--primary">${I.get('save', 18)} Simpan Stok</button>`,
+      onMount: handle => {
+        const root = handle.root;
+        const form = root.querySelector('#stockForm');
+        const input = root.querySelector('#stockQty');
+        const preview = root.querySelector('[data-preview]');
+        const history = root.querySelector('[data-history]');
+
+        const readQty = () => Math.max(0, Math.round(Number(input.value) || 0));
+
+        function drawPreview() {
+          const s = stats();
+          const dibuat = readQty();
+          const sisa = dibuat - s.terjual - s.dikeep;
+          const tone = sisa < 0 ? 'is-bad' : sisa === 0 ? 'is-warn' : 'is-good';
+          preview.innerHTML = `
+            <div class="stock-preview__row">
+              <span>${I.get('cart', 14)} Terjual</span><b>${s.terjual}</b>
+            </div>
+            <div class="stock-preview__row">
+              <span>${I.get('calendar', 14)} Ter-keep (pre-order)</span><b>${s.dikeep}</b>
+            </div>
+            <div class="stock-preview__row stock-preview__row--total ${tone}">
+              <span>${I.get('package', 15)} Sisa bisa dijual</span><b>${sisa}</b>
+            </div>
+            ${sisa < 0 ? `<p class="stock-preview__warn">${I.get('alert', 14)} Yang terjual dan ter-keep sudah lebih banyak dari yang dibuat. Tambah jumlahnya kalau memang sempat bikin lagi.</p>` : ''}`;
+        }
+
+        function drawHistory() {
+          const list = S.stockEntries(d, product.id);
+          if (!list.length) {
+            history.innerHTML = `<p class="form__hint form__hint--muted">${I.get('info', 15)} Belum ada catatan stok untuk tanggal ini.</p>`;
+            return;
+          }
+          history.innerHTML = `
+            <div class="stock-log">
+              <span class="field__label">Riwayat hari ini</span>
+              <ul class="stock-log__list">
+                ${list.map(s => `
+                  <li class="stock-log__item">
+                    <b class="stock-log__qty ${s.qty < 0 ? 'is-neg' : ''}">${s.qty > 0 ? '+' : ''}${s.qty}</b>
+                    <span class="stock-log__meta">
+                      ${clockOf(s.createdAt)}${s.note ? ' • ' + U.escapeHtml(s.note) : ''}
+                    </span>
+                    <button type="button" class="icon-btn stock-log__del" data-del="${s.id}" aria-label="Hapus catatan ini">${I.get('trash', 14)}</button>
+                  </li>`).join('')}
+              </ul>
+            </div>`;
+          history.querySelectorAll('[data-del]').forEach(btn => {
+            btn.addEventListener('click', () => {
+              S.removeStockEntry(btn.dataset.del);
+              // Kotak isian ikut menyesuaikan, supaya angkanya tidak
+              // menimpa balik catatan yang barusan dihapus.
+              input.value = String(stats().dibuat);
+              drawHistory();
+              drawPreview();
+              if (onDone) onDone();
+            });
+          });
+        }
+
+        root.querySelectorAll('[data-step]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            input.value = String(Math.max(0, readQty() + Number(btn.dataset.step)));
+            drawPreview();
+          });
+        });
+        root.querySelectorAll('[data-add]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            input.value = String(readQty() + Number(btn.dataset.add));
+            drawPreview();
+          });
+        });
+        input.addEventListener('input', drawPreview);
+
+        root.querySelector('[data-act=cancel]').addEventListener('click', () => handle.close());
+
+        form.addEventListener('submit', e => {
+          e.preventDefault();
+          const target = readQty();
+          const before = stats().dibuat;
+          const entry = S.setStockMade(product.id, d, target, form.note.value.trim());
+          handle.close();
+          if (!entry) global.UI.toast('Jumlah stok tidak berubah', 'info', 3000);
+          else if (entry.qty > 0 && before > 0) global.UI.toast(`Stok "${product.name}" ditambah ${entry.qty} → ${target}`, 'success');
+          else global.UI.toast(`Stok "${product.name}" diatur ${target}`, 'success');
+          if (onDone) onDone();
+        });
+
+        drawPreview();
+        drawHistory();
+      }
+    });
+  }
+
+  function clockOf(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return String(d.getHours()).padStart(2, '0') + '.' + String(d.getMinutes()).padStart(2, '0');
+  }
+
   /* ---------- Modal: Kategori Pengeluaran ---------- */
 
   function categoryModal(existing, onDone) {
@@ -1098,7 +1261,7 @@
 
   global.Forms = {
     expenseModal, quickIncomeModal, incomeDetailModal,
-    productModal, categoryModal, receiptModal, preorderModal, completePreorderModal,
+    productModal, categoryModal, receiptModal, preorderModal, completePreorderModal, stockModal,
     bindAmount, bindChips, amountField, dateTimeFields, methodChips, noteField
   };
 })(window);

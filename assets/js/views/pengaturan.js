@@ -199,7 +199,7 @@
         </div>
       </section>
 
-      <p class="app-version">Dapur Kita • <b>versi 1.6</b> • dibuat dengan ❤️ untuk usaha makanan rumahan</p>`;
+      <p class="app-version">Dapur Kita • <b>versi 1.7</b> • dibuat dengan ❤️ untuk usaha makanan rumahan</p>`;
 
     bind(root);
   }
@@ -355,7 +355,7 @@
     root.querySelector('[data-act=clear-trx]').addEventListener('click', async () => {
       const ok = await UI.confirm({
         title: 'Hapus semua transaksi?',
-        message: 'Seluruh catatan pemasukan dan pengeluaran akan hilang permanen. Sebaiknya buat cadangan dulu.',
+        message: 'Seluruh catatan pemasukan, pengeluaran, dan stok harian akan hilang permanen. Sebaiknya buat cadangan dulu.',
         danger: true, confirmText: 'Hapus semua transaksi'
       });
       if (!ok) return;

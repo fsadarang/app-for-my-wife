@@ -7,16 +7,31 @@
   const U = global.Utils, I = global.Icons, S = global.Store, UI = global.UI;
   global.Views = global.Views || {};
 
-  let tab = 'menu';   // menu | kategori
+  let tab = 'menu';   // menu | stok | kategori
   let q = '';
+  let stockDate = null;   // tanggal yang sedang dilihat di tab Stok
+
+  /**
+   * Simpan tab & tanggal yang sedang dibuka ke alamat halaman TANPA
+   * memicu navigasi ulang, supaya saat tampilan disegarkan (misalnya
+   * setelah mencatat pengeluaran) posisinya tidak melompat balik.
+   */
+  function syncHash() {
+    const next = '#/menu' + (tab === 'stok' ? '?tab=stok&date=' + stockDate : tab === 'kategori' ? '?tab=kategori' : '');
+    if (location.hash === next) return;
+    try { history.replaceState(null, '', next); } catch (e) { /* alamat tidak bisa diubah, abaikan */ }
+  }
 
   function render(root, params) {
     if (params && params.tab) tab = params.tab;
+    if (params && params.date) stockDate = params.date;
+    if (!stockDate) stockDate = U.today();
+
     root.innerHTML = `
       <section class="page-head">
         <div>
-          <h1 class="page-title">${I.get('book', 22)} Menu &amp; Kategori</h1>
-          <p class="page-sub">Atur daftar jualan beserta harga, dan kelompok pengeluaran usahamu.</p>
+          <h1 class="page-title">${I.get('book', 22)} Menu &amp; Stok</h1>
+          <p class="page-sub">Atur daftar jualan, jumlah yang tersedia hari ini, dan kelompok pengeluaran.</p>
         </div>
         <div class="page-head__actions" data-head-actions></div>
       </section>
@@ -25,18 +40,22 @@
         <button type="button" class="seg__btn${tab === 'menu' ? ' is-active' : ''}" data-tab="menu" role="tab">
           ${I.get('book', 16)} Daftar Menu
         </button>
+        <button type="button" class="seg__btn${tab === 'stok' ? ' is-active' : ''}" data-tab="stok" role="tab">
+          ${I.get('package', 16)} Stok
+        </button>
         <button type="button" class="seg__btn${tab === 'kategori' ? ' is-active' : ''}" data-tab="kategori" role="tab">
-          ${I.get('tag', 16)} Kategori Pengeluaran
+          ${I.get('tag', 16)} Kategori
         </button>
       </div>
 
       <div data-tab-body></div>`;
 
     root.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => {
-      tab = b.dataset.tab; q = ''; render(root);
+      tab = b.dataset.tab; q = ''; syncHash(); render(root);
     }));
 
     if (tab === 'menu') renderMenuTab(root);
+    else if (tab === 'stok') renderStockTab(root);
     else renderCategoryTab(root);
   }
 
@@ -168,6 +187,195 @@
           <span class="icon-btn icon-btn--ghost" aria-hidden="true">${I.get('edit', 16)}</span>
         </div>
       </article>`;
+  }
+
+  /* ---------- Tab: Stok ---------- */
+
+  /**
+   * Berapa porsi tiap varian yang tersedia pada satu tanggal, dipisah
+   * antara yang sudah terjual dan yang di-keep untuk pre-order, supaya
+   * angka "sisa" benar-benar bisa dijual ke pembeli yang datang.
+   */
+  function renderStockTab(root) {
+    const host = root.querySelector('[data-tab-body]');
+    const st = S.get();
+    const sum = S.stockSummary(stockDate);
+    const rows = sum.rows;
+    const isToday = stockDate === U.today();
+
+    root.querySelector('[data-head-actions]').innerHTML = `
+      <button type="button" class="btn btn--soft" data-act="copy-prev">${I.get('copy', 18)} Salin Kemarin</button>
+      <button type="button" class="btn btn--primary" data-act="today" ${isToday ? 'disabled' : ''}>${I.get('calendar', 18)} Hari Ini</button>`;
+
+    if (!st.products.length) {
+      host.innerHTML = UI.emptyState({
+        emoji: '📦',
+        title: 'Belum ada menu untuk diatur stoknya',
+        text: 'Tambahkan menu jualanmu dulu di tab "Daftar Menu", baru jumlah tersedianya bisa dicatat di sini.',
+        actionLabel: 'Ke Daftar Menu'
+      });
+      host.querySelector('[data-empty-action]').addEventListener('click', () => { tab = 'menu'; syncHash(); render(root); });
+      bindStockHead(root);
+      return;
+    }
+
+    const groups = U.groupBy(rows.filter(r => !r.hilang), r => r.group || 'Lainnya');
+    const orphan = rows.filter(r => r.hilang);
+
+    host.innerHTML = `
+      ${UI.tipCard('stok-cara', `Isi <b>jumlah yang dibuat</b> tiap pagi. Setiap penjualan otomatis mengurangi sisanya, dan pesanan pre-order untuk tanggal itu otomatis di-<b>keep</b> supaya tidak ikut terjual.`)}
+
+      <div class="datebar">
+        <button type="button" class="icon-btn" data-act="prev" aria-label="Tanggal sebelumnya">${I.get('chevronLeft', 18)}</button>
+        <div class="datebar__body">
+          <strong class="datebar__label">${U.formatDateRelative(stockDate)}</strong>
+          <span class="datebar__sub">${U.formatDateFull(stockDate)}</span>
+        </div>
+        <button type="button" class="icon-btn" data-act="next" aria-label="Tanggal berikutnya">${I.get('chevronRight', 18)}</button>
+        <input type="date" class="datebar__input" data-date-input value="${stockDate}" aria-label="Pilih tanggal stok">
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-mini"><span>${I.get('package', 16)} Dibuat</span><strong>${sum.dibuat}</strong></div>
+        <div class="stat-mini"><span>${I.get('cart', 16)} Terjual</span><strong>${sum.terjual}</strong></div>
+        <div class="stat-mini"><span>${I.get('calendar', 16)} Ter-keep</span><strong>${sum.dikeep}</strong></div>
+        <div class="stat-mini stat-mini--accent"><span>${I.get('check', 16)} Sisa</span><strong>${sum.sisa}</strong></div>
+      </div>
+
+      ${!sum.diaturCount ? `
+        <div class="notice notice--info">
+          ${I.get('info', 18)}
+          <div>
+            <b>Stok ${U.formatDateRelative(stockDate).toLowerCase()} belum diatur.</b>
+            <span>Ketuk menu di bawah untuk mengisi jumlah yang dibuat. Penjualan tetap bisa dicatat walau stok belum diisi.</span>
+          </div>
+        </div>` : (sum.habis || sum.menipis) ? `
+        <div class="notice notice--warn">
+          ${I.get('alert', 18)}
+          <div>
+            <b>${sum.habis ? sum.habis + ' menu habis' : ''}${sum.habis && sum.menipis ? ' • ' : ''}${sum.menipis ? sum.menipis + ' menu menipis' : ''}</b>
+            <span>Sisa dihitung setelah dikurangi yang terjual dan yang di-keep untuk pre-order.</span>
+          </div>
+        </div>` : ''}
+
+      ${Array.from(groups.keys()).sort().map(g => `
+        <section class="card card--group">
+          <div class="card__head">
+            <h2 class="card__title">${U.escapeHtml(g)}</h2>
+            <span class="card__sub">${groups.get(g).length} menu</span>
+          </div>
+          <ul class="stock-list">
+            ${groups.get(g).map(stockRow).join('')}
+          </ul>
+        </section>`).join('')}
+
+      ${orphan.length ? `
+        <section class="card card--group">
+          <div class="card__head">
+            <h2 class="card__title">Item di luar daftar menu</h2>
+            <span class="card__sub">tercatat terjual / di-keep</span>
+          </div>
+          <ul class="stock-list">
+            ${orphan.map(stockRow).join('')}
+          </ul>
+        </section>` : ''}`;
+
+    bindStockHead(root);
+
+    const goDate = d => { stockDate = d; syncHash(); renderStockTab(root); };
+    host.querySelector('[data-act=prev]').addEventListener('click', () => goDate(U.addDays(stockDate, -1)));
+    host.querySelector('[data-act=next]').addEventListener('click', () => goDate(U.addDays(stockDate, 1)));
+    const dateInput = host.querySelector('[data-date-input]');
+    dateInput.addEventListener('change', () => goDate(dateInput.value || U.today()));
+
+    const openStock = id => {
+      const p = S.getProduct(id);
+      if (!p) return;
+      global.Forms.stockModal(p, stockDate, () => renderStockTab(root));
+    };
+
+    UI.on(host, 'click', '[data-add-stock]', (e, node) => {
+      e.stopPropagation();
+      const id = node.dataset.addStock;
+      const n = Number(node.dataset.qty) || 0;
+      const p = S.getProduct(id);
+      if (!p || !n) return;
+      S.addStockEntry({ productId: id, date: stockDate, qty: n });
+      UI.toast(`"${p.name}" +${n} → ${S.stockMade(id, stockDate)} dibuat`, 'success', 3000);
+      renderStockTab(root);
+    }, 'StockAdd');
+
+    UI.on(host, 'click', '[data-stock]', (e, node) => {
+      if (e.target.closest('[data-add-stock]')) return;
+      openStock(node.dataset.stock);
+    }, 'StockOpen');
+
+    UI.on(host, 'keydown', '[data-stock]', (e, node) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      openStock(node.dataset.stock);
+    }, 'StockOpenKey');
+
+    bindTips(host);
+  }
+
+  function bindStockHead(root) {
+    const todayBtn = root.querySelector('[data-act=today]');
+    if (todayBtn) todayBtn.addEventListener('click', () => { stockDate = U.today(); syncHash(); renderStockTab(root); });
+
+    const copyBtn = root.querySelector('[data-act=copy-prev]');
+    if (copyBtn) copyBtn.addEventListener('click', async () => {
+      const prev = U.addDays(stockDate, -1);
+      const source = S.stockOverview(prev).filter(r => r.productId && r.diatur && r.dibuat > 0);
+      if (!source.length) {
+        UI.toast(`Tidak ada catatan stok pada ${U.formatDateRelative(prev).toLowerCase()} untuk disalin`, 'info', 4000);
+        return;
+      }
+      // Hanya menu yang belum punya catatan hari ini yang diisi, supaya
+      // angka yang sudah diatur sendiri tidak tertimpa.
+      const target = source.filter(r => !S.hasStockRecord(r.productId, stockDate));
+      if (!target.length) {
+        UI.toast('Semua menu sudah punya catatan stok untuk tanggal ini', 'info', 4000);
+        return;
+      }
+      const ok = await UI.confirm({
+        title: 'Salin stok dari ' + U.formatDateRelative(prev).toLowerCase() + '?',
+        message: `${target.length} menu akan diisi dengan jumlah yang sama seperti ${U.formatDateRelative(prev).toLowerCase()}. Menu yang stoknya sudah diatur tidak diubah.`,
+        confirmText: 'Salin'
+      });
+      if (!ok) return;
+      target.forEach(r => S.addStockEntry({ productId: r.productId, date: stockDate, qty: r.dibuat, note: 'salinan ' + prev }));
+      UI.toast(`${target.length} menu disalin dari ${U.formatDateRelative(prev).toLowerCase()}`, 'success');
+      renderStockTab(root);
+    });
+  }
+
+  function stockRow(r) {
+    const tone = !r.diatur ? 'none' : r.sisa < 0 ? 'bad' : r.sisa === 0 ? 'bad' : r.sisa <= S.LOW_STOCK ? 'warn' : 'good';
+    const clickable = !!r.productId;
+    return `
+      <li class="stock-row is-${tone}"${clickable ? ` data-stock="${r.productId}" tabindex="0" role="button" aria-label="Atur stok ${U.escapeHtml(r.name)}"` : ''}>
+        <span class="stock-row__emoji">${r.emoji || '🍽️'}</span>
+        <div class="stock-row__body">
+          <p class="stock-row__name">${U.escapeHtml(r.name)}${r.active === false && !r.hilang ? ' <span class="badge badge--muted">disembunyikan</span>' : ''}</p>
+          <p class="stock-row__meta">
+            <span class="stock-tag">${I.get('package', 12)} Dibuat <b>${r.diatur ? r.dibuat : '–'}</b></span>
+            <span class="stock-tag stock-tag--sold">${I.get('cart', 12)} Terjual <b>${r.terjual}</b></span>
+            <span class="stock-tag stock-tag--keep">${I.get('calendar', 12)} Keep <b>${r.dikeep}</b></span>
+          </p>
+          ${clickable ? `
+            <div class="stock-row__quick">
+              <button type="button" class="chip chip--mini" data-add-stock="${r.productId}" data-qty="5">+5</button>
+              <button type="button" class="chip chip--mini" data-add-stock="${r.productId}" data-qty="10">+10</button>
+              <span class="stock-row__hint">ketuk baris untuk atur</span>
+            </div>` : ''}
+        </div>
+        <div class="stock-row__right">
+          <span class="stock-row__left-label">Sisa</span>
+          <strong class="stock-row__left">${r.diatur ? r.sisa : '–'}</strong>
+          ${!r.diatur ? '<span class="stock-row__unset">belum diatur</span>' : ''}
+        </div>
+      </li>`;
   }
 
   /* ---------- Tab: Kategori Pengeluaran ---------- */

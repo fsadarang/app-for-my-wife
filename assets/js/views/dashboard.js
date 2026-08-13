@@ -137,6 +137,34 @@
         </section>`;
       })()}
 
+      ${(() => {
+        const stok = S.stockSummary(t);
+        if (!stok.diaturCount) return '';
+        const rows = stok.diatur.slice().sort((a, b) => a.sisa - b.sisa).slice(0, 6);
+        return `
+        <section class="card card--stok">
+          <div class="card__head">
+            <div>
+              <h2 class="card__title">${I.get('package', 18)} Stok Hari Ini</h2>
+              <p class="card__sub">${stok.dibuat} dibuat • ${stok.terjual} terjual • ${stok.dikeep} di-keep • <b>sisa ${stok.sisa}</b></p>
+            </div>
+            <a class="link" href="#/menu?tab=stok">Atur stok ${I.get('chevronRight', 14)}</a>
+          </div>
+          ${stok.habis ? `<p class="po-warn">${I.get('alert', 15)} <b>${stok.habis}</b> menu sudah habis</p>` : ''}
+          <ul class="stok-mini">
+            ${rows.map(r => {
+              const tone = r.sisa <= 0 ? 'bad' : r.sisa <= S.LOW_STOCK ? 'warn' : 'good';
+              return `<li class="stok-mini__row">
+                <span class="stok-mini__emoji">${r.emoji || '🍽️'}</span>
+                <span class="stok-mini__name">${U.escapeHtml(r.name)}</span>
+                <span class="stok-mini__meta">${r.terjual} terjual • ${r.dikeep} keep</span>
+                <span class="stok-mini__left is-${tone}">${r.sisa <= 0 ? 'habis' : r.sisa}</span>
+              </li>`;
+            }).join('')}
+          </ul>
+        </section>`;
+      })()}
+
       <div class="grid grid--2-1">
         <section class="card">
           <div class="card__head">

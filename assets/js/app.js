@@ -18,7 +18,7 @@
 
   const TITLES = {
     dashboard: 'Beranda', kasir: 'Kasir', preorder: 'Pre-Order', transaksi: 'Transaksi',
-    laporan: 'Laporan', menu: 'Menu & Kategori', pengaturan: 'Pengaturan'
+    laporan: 'Laporan', menu: 'Menu & Stok', pengaturan: 'Pengaturan'
   };
 
   let viewRoot = null;      // <main id="view">
@@ -99,6 +99,9 @@
           <button type="button" class="fab__item" data-fab-act="quick">
             <span class="fab__item-icon fab__item-icon--neutral">${I.get('coins', 18)}</span> Pemasukan Cepat
           </button>
+          <button type="button" class="fab__item" data-fab-act="stok">
+            <span class="fab__item-icon fab__item-icon--neutral">${I.get('package', 18)}</span> Atur Stok
+          </button>
         </div>
         <button type="button" class="fab__btn" data-fab-toggle aria-label="Aksi cepat" aria-expanded="false">
           ${I.get('plus', 26)}
@@ -159,6 +162,7 @@
       if (act === 'sale') UI.navigate('kasir');
       if (act === 'expense') global.Forms.expenseModal(null, refreshCurrentView);
       if (act === 'quick') global.Forms.quickIncomeModal(refreshCurrentView);
+      if (act === 'stok') UI.navigate('menu', { tab: 'stok', date: U.today() });
     });
   }
 
