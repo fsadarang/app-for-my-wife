@@ -388,6 +388,23 @@ ${list.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxm
     return rows;
   }
 
+  /**
+   * Sheet Stok: berapa yang dibuat tiap hari per varian, dipisah antara
+   * yang terjual, yang di-keep untuk pre-order, dan yang masih sisa.
+   */
+  function stockRows(from, to) {
+    const rows = [['Tanggal', 'Menu', 'Dibuat', 'Terjual', 'Ter-keep (Pre-Order)', 'Sisa']];
+    const dates = Array.from(new Set((S().get().stocks || [])
+      .map(s => s.date)
+      .filter(d => (!from || d >= from) && (!to || d <= to)))).sort();
+    dates.forEach(date => {
+      S().stockOverview(date)
+        .filter(r => r.diatur)
+        .forEach(r => rows.push([date, r.name, r.dibuat, r.terjual, r.dikeep, r.sisa]));
+    });
+    return rows;
+  }
+
   function summaryRows(list, title, rangeLabel) {
     const incomes = list.filter(t => t.type === 'income');
     const expenses = list.filter(t => t.type === 'expense');
@@ -431,6 +448,8 @@ ${list.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxm
       { name: 'Rincian Item', rows: itemRows(list), headerRows: 1 },
       { name: 'Pengeluaran', rows: expenseRows(list), headerRows: 1 }
     ];
+    const stok = stockRows(o.from, o.to);
+    if (stok.length > 1) sheets.push({ name: 'Stok', rows: stok, headerRows: 1 });
     const po = preorderRows();
     if (po.length > 1) sheets.push({ name: 'Pre-Order', rows: po, headerRows: 1 });
     if (o.from && o.to) {
@@ -489,6 +508,7 @@ ${list.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxm
 
   global.Exporter = {
     buildXlsx, buildWorkbook, buildCSV, saveWorkbook, zip, crc32,
-    itemRows, orderRows, expenseRows, dailyRows, summaryRows, preorderRows, colName, safeSheetName
+    itemRows, orderRows, expenseRows, dailyRows, summaryRows, preorderRows, stockRows,
+    colName, safeSheetName
   };
 })(window);

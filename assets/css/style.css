@@ -412,6 +412,8 @@ kbd {
   transition: background .15s, color .15s;
 }
 .seg--wide .seg__btn { flex: 1; }
+/* Tiga tab: labelnya jangan patah jadi dua baris */
+.seg--tabs .seg__btn { white-space: nowrap; padding-inline: 12px; }
 .seg__btn:hover { color: var(--text); }
 .seg__btn.is-active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
 
@@ -1792,9 +1794,176 @@ kbd {
 .btn.is-disabled, .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn.is-disabled:hover, .btn:disabled:hover { transform: none; }
 
+/* =========================================================
+   Stok harian per varian
+   ========================================================= */
+
+/* Penggeser tanggal */
+.datebar {
+  display: flex; align-items: center; gap: 10px; position: relative;
+  padding: 10px 12px; border-radius: var(--r-md);
+  background: var(--surface); border: 1px solid var(--border);
+}
+.datebar__body { flex: 1; min-width: 0; text-align: center; }
+.datebar__label { display: block; font-size: .95rem; font-weight: 800; }
+.datebar__sub { display: block; font-size: .74rem; color: var(--text-3); }
+/* Kotak tanggal asli ditumpuk transparan agar seluruh bilah bisa diketuk */
+.datebar__input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; border: 0; padding: 0; cursor: pointer;
+}
+.datebar .icon-btn { position: relative; z-index: 1; }
+
+/* Pemberitahuan ringkas */
+.notice {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px; border-radius: var(--r-md);
+  border: 1px solid var(--border); background: var(--surface-2);
+}
+.notice div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.notice b { font-size: .88rem; }
+.notice span { font-size: .8rem; color: var(--text-2); line-height: 1.45; }
+.notice--info { background: var(--cash-soft); border-color: color-mix(in srgb, var(--cash) 28%, transparent); }
+.notice--info > svg { color: var(--cash); flex: none; }
+.notice--warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
+.notice--warn > svg { color: var(--warn); flex: none; }
+
+/* Daftar stok per varian */
+.stock-list { display: flex; flex-direction: column; gap: 8px; }
+.stock-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 13px; border-radius: var(--r-md);
+  background: var(--surface-2); border: 1px solid var(--border);
+  cursor: pointer; transition: border-color .15s, transform .12s var(--ease);
+}
+.stock-row:hover { border-color: var(--primary); transform: translateY(-1px); }
+.stock-row:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.stock-row.is-good { border-left: 4px solid var(--income); }
+.stock-row.is-warn { border-left: 4px solid var(--warn); }
+.stock-row.is-bad { border-left: 4px solid var(--expense); }
+.stock-row.is-none { border-left: 4px dashed var(--border-strong); }
+.stock-row__emoji { font-size: 1.6rem; flex: none; line-height: 1; }
+.stock-row__body { flex: 1; min-width: 0; }
+.stock-row__name { font-size: .92rem; font-weight: 700; line-height: 1.3; }
+.stock-row__meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.stock-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: var(--r-full);
+  background: var(--surface-3); color: var(--text-2);
+  font-size: .72rem; font-weight: 600; white-space: nowrap;
+}
+.stock-tag b { font-weight: 800; color: var(--text); }
+.stock-tag--sold { background: var(--income-soft); color: var(--income); }
+.stock-tag--sold b { color: var(--income); }
+.stock-tag--keep { background: var(--primary-soft); color: var(--primary); }
+.stock-tag--keep b { color: var(--primary); }
+.stock-row__right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.stock-row__left-label { font-size: .68rem; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.stock-row__left { font-size: 1.45rem; font-weight: 800; line-height: 1; }
+.stock-row.is-good .stock-row__left { color: var(--income); }
+.stock-row.is-warn .stock-row__left { color: var(--warn); }
+.stock-row.is-bad .stock-row__left { color: var(--expense); }
+.stock-row.is-none .stock-row__left { color: var(--text-3); }
+/* Tombol cepat diletakkan di sisi kiri: sisi kanan bawah layar tertutup
+   tombol aksi cepat yang mengambang. */
+.stock-row__quick { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+.stock-row__hint { font-size: .68rem; color: var(--text-3); }
+.stock-row__unset { font-size: .66rem; color: var(--text-3); font-weight: 600; white-space: nowrap; }
+.chip--mini {
+  padding: 4px 9px; font-size: .72rem; font-weight: 700;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-full);
+  color: var(--text-2); cursor: pointer;
+}
+.chip--mini:hover { border-color: var(--primary); color: var(--primary); }
+
+/* Jendela "Atur Stok" */
+.stock-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: var(--r-md);
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.stock-head__emoji { font-size: 1.8rem; line-height: 1; }
+.stock-head__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stock-head__name { font-size: 1rem; font-weight: 800; }
+.stock-head__date { display: flex; align-items: center; gap: 5px; font-size: .77rem; color: var(--text-3); }
+.stock-input { display: flex; align-items: center; gap: 10px; }
+.stock-input__btn {
+  width: 46px; height: 46px; flex: none; display: grid; place-items: center;
+  border-radius: var(--r); border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); cursor: pointer;
+}
+.stock-input__btn:hover { border-color: var(--primary); color: var(--primary); }
+.stock-input input {
+  flex: 1; min-width: 0; text-align: center;
+  font-size: 1.6rem; font-weight: 800; padding: 8px 10px;
+  -moz-appearance: textfield; appearance: textfield;
+}
+/* Panah bawaan peramban disembunyikan — sudah ada tombol − dan + sendiri */
+.stock-input input::-webkit-outer-spin-button,
+.stock-input input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.chip-row--quick { flex-wrap: wrap; gap: 6px; }
+.stock-preview {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 12px 14px; border-radius: var(--r-md);
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.stock-preview__row { display: flex; align-items: center; justify-content: space-between; font-size: .84rem; color: var(--text-2); }
+.stock-preview__row span { display: flex; align-items: center; gap: 6px; }
+.stock-preview__row b { font-weight: 800; color: var(--text); }
+.stock-preview__row--total { border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 2px; font-weight: 700; }
+.stock-preview__row--total b { font-size: 1.3rem; }
+.stock-preview__row--total.is-good b { color: var(--income); }
+.stock-preview__row--total.is-warn b { color: var(--warn); }
+.stock-preview__row--total.is-bad b { color: var(--expense); }
+.stock-preview__warn { display: flex; align-items: flex-start; gap: 6px; font-size: .78rem; color: var(--warn); line-height: 1.45; }
+.stock-log { display: flex; flex-direction: column; gap: 7px; }
+.stock-log__list { display: flex; flex-direction: column; gap: 5px; }
+.stock-log__item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: var(--r); background: var(--surface-2);
+}
+.stock-log__qty { min-width: 40px; font-weight: 800; font-size: .9rem; color: var(--income); }
+.stock-log__qty.is-neg { color: var(--expense); }
+.stock-log__meta { flex: 1; min-width: 0; font-size: .78rem; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stock-log__del { width: 30px; height: 30px; color: var(--text-3); flex: none; }
+.stock-log__del:hover { color: var(--expense); }
+
+/* Label sisa stok pada kartu menu di Kasir */
+.prod__stock {
+  display: inline-flex; align-items: center; gap: 4px; margin-top: 5px;
+  padding: 2px 8px; border-radius: var(--r-full);
+  background: var(--surface-3); color: var(--text-2);
+  font-size: .68rem; font-weight: 800; letter-spacing: .01em;
+}
+.prod__stock.is-low { background: var(--warn-soft); color: var(--warn); }
+.prod__stock.is-out { background: var(--expense-soft); color: var(--expense); }
+.prod.is-stock-out { border-style: dashed; }
+.prod.is-stock-out .prod__emoji { opacity: .55; }
+
+/* Ringkasan stok di Beranda */
+.card--stok { border-color: color-mix(in srgb, var(--cash) 28%, var(--border)); }
+.stok-mini { display: flex; flex-direction: column; gap: 8px; }
+.stok-mini__row { display: flex; align-items: center; gap: 10px; font-size: .85rem; }
+.stok-mini__emoji { font-size: 1.1rem; flex: none; }
+.stok-mini__name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stok-mini__meta { color: var(--text-3); font-size: .74rem; white-space: nowrap; }
+.stok-mini__left { min-width: 44px; text-align: right; font-weight: 800; }
+.stok-mini__left.is-good { color: var(--income); }
+.stok-mini__left.is-warn { color: var(--warn); }
+.stok-mini__left.is-bad { color: var(--expense); }
+
+.stat-mini--accent { border-color: color-mix(in srgb, var(--income) 35%, var(--border)); background: var(--income-soft); }
+.stat-mini--accent strong { color: var(--income); }
+
 @media (max-width: 640px) {
   .po-list { grid-template-columns: 1fr; }
   /* Enam tab pada layar sempit: label diperkecil agar tetap terbaca */
   .bottomnav__label { font-size: .6rem; letter-spacing: -.01em; }
   .bottomnav__item { padding-left: 0; padding-right: 0; }
+
+  .stock-row { gap: 9px; padding: 10px 11px; }
+  .stock-row__emoji { font-size: 1.35rem; }
+  .stock-row__name { font-size: .86rem; }
+  .stock-tag { font-size: .68rem; padding: 2px 6px; }
+  .stock-row__left { font-size: 1.25rem; }
 }

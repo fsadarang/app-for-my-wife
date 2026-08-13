@@ -127,6 +127,7 @@
                      value="${U.escapeHtml(search)}" aria-label="Cari menu">
               <button type="button" class="search__clear" data-act="clear-search" hidden aria-label="Bersihkan">${I.get('x', 16)}</button>
             </div>
+            <button type="button" class="btn btn--soft" data-act="stok">${I.get('package', 18)} Stok</button>
             <button type="button" class="btn btn--soft" data-act="add-product">${I.get('plus', 18)} Menu Baru</button>
           </div>
 
@@ -175,6 +176,10 @@
 
     root.querySelector('[data-act=add-product]').addEventListener('click', () => {
       global.Forms.productModal(null, () => render(root));
+    });
+
+    root.querySelector('[data-act=stok]').addEventListener('click', () => {
+      UI.navigate('menu', { tab: 'stok', date: saleDate || U.today() });
     });
 
     /* --- Panel pesanan (mobile) --- */
@@ -243,16 +248,24 @@
       return;
     }
 
+    // Sisa stok tanggal ini, sudah dikurangi yang terjual dan yang
+    // di-keep untuk pre-order. Menu tanpa catatan stok tidak diberi label.
+    const stockMap = stockIndex();
+
     grid.innerHTML = list.map(p => {
       const inCart = cart.find(c => c.productId === p.id);
       const margin = p.price && p.cost ? Math.round(((p.price - p.cost) / p.price) * 100) : null;
+      const stk = stockMap.get(p.id);
+      const left = stk && stk.diatur ? stk.sisa - (inCart ? inCart.qty : 0) : null;
+      const tone = left == null ? '' : left <= 0 ? ' is-out' : left <= S.LOW_STOCK ? ' is-low' : '';
       return `
-        <button type="button" class="prod${inCart ? ' is-in-cart' : ''}" data-add="${p.id}">
+        <button type="button" class="prod${inCart ? ' is-in-cart' : ''}${left != null && left <= 0 ? ' is-stock-out' : ''}" data-add="${p.id}">
           ${inCart ? `<span class="prod__badge">${inCart.qty}</span>` : ''}
           <span class="prod__emoji">${p.emoji || '🍽️'}</span>
           <span class="prod__name">${U.escapeHtml(p.name)}</span>
           <span class="prod__price">${U.rupiah(p.price)}</span>
           ${margin != null ? `<span class="prod__margin">untung ${margin}%</span>` : ''}
+          ${left != null ? `<span class="prod__stock${tone}">${I.get('package', 11)} ${left <= 0 ? 'habis' : 'sisa ' + left}</span>` : ''}
         </button>`;
     }).join('') + `
       <button type="button" class="prod prod--custom" data-act="custom-item">
@@ -279,12 +292,32 @@
     node.classList.add('is-bump');
   }
 
+  /** Peta sisa stok per menu untuk tanggal penjualan yang sedang dipakai */
+  function stockIndex() {
+    const rows = S.stockOverview(saleDate || U.today());
+    return new Map(rows.filter(r => r.productId).map(r => [r.productId, r]));
+  }
+
+  /**
+   * Stok hanya dipakai sebagai PERINGATAN, tidak pernah menghalangi.
+   * Penjualan yang sungguh-sungguh terjadi harus selalu bisa dicatat,
+   * walau catatan stoknya belum sempat diperbarui.
+   */
+  function warnIfOverStock(productId, qtyInCart) {
+    const row = stockIndex().get(productId);
+    if (!row || !row.diatur) return;
+    const left = row.sisa - qtyInCart;
+    if (left >= 0) return;
+    UI.toast(`Stok "${row.name}" kurang ${Math.abs(left)} porsi — pesanan tetap bisa disimpan`, 'warn', 5000);
+  }
+
   function addToCart(productId) {
     const p = S.getProduct(productId);
     if (!p) return;
     const found = cart.find(c => c.productId === p.id);
     if (found) found.qty += 1;
     else cart.push({ productId: p.id, name: p.name, emoji: p.emoji, qty: 1, price: p.price, cost: p.cost });
+    warnIfOverStock(p.id, (found ? found.qty : 1));
   }
 
   function renderCart(root) {
@@ -407,7 +440,11 @@
     /* --- Interaksi pesanan --- */
     itemsHost.querySelectorAll('.cart-item').forEach(node => {
       const i = Number(node.dataset.i);
-      node.querySelector('[data-inc]').addEventListener('click', () => { cart[i].qty += 1; renderCart(root); renderGrid(root); });
+      node.querySelector('[data-inc]').addEventListener('click', () => {
+        cart[i].qty += 1;
+        if (cart[i].productId) warnIfOverStock(cart[i].productId, cart[i].qty);
+        renderCart(root); renderGrid(root);
+      });
       node.querySelector('[data-dec]').addEventListener('click', () => {
         cart[i].qty -= 1;
         if (cart[i].qty <= 0) cart.splice(i, 1);
