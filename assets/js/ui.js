@@ -92,6 +92,10 @@
 
   /**
    * modal({ title, subtitle, icon, body, footer, size, onMount, onClose, closeOnBackdrop })
+   *
+   * closeOnBackdrop: bawaannya `false` — ketukan di luar jendela tidak
+   * menutup apa pun. Isi `true` hanya kalau jendela itu memang tidak punya
+   * isian yang bisa hilang.
    * -> { close, root, body }
    */
   function modal(opts) {
@@ -138,8 +142,26 @@
     }
 
     qs('.modal__close', overlay).addEventListener('click', () => close());
+
+    /**
+     * Ketukan di luar jendela TIDAK menutup apa pun.
+     *
+     * Di HP, area di luar jendela gampang sekali tersenggol — misalnya saat
+     * menutup papan ketik atau jari meleset sedikit — dan dulu isian yang
+     * sudah setengah diketik langsung hilang tanpa peringatan. Sekarang
+     * jendelanya hanya bergoyang sebentar dan tombol tutup ikut berkedip,
+     * supaya jelas ketukannya terbaca tapi memang sengaja tidak ditutup.
+     *
+     * Menutup jendela harus lewat tombol X, tombol Batal, atau Esc — tiga
+     * hal yang tidak mungkin tertekan tanpa sengaja.
+     */
+    const dialog = qs('.modal', overlay);
     overlay.addEventListener('mousedown', e => {
-      if (e.target === overlay && o.closeOnBackdrop !== false) close();
+      if (e.target !== overlay) return;
+      if (o.closeOnBackdrop === true) { close(); return; }
+      dialog.classList.remove('is-nudge');
+      void dialog.offsetWidth;      // paksa animasi mengulang dari awal
+      dialog.classList.add('is-nudge');
     });
 
     document.body.appendChild(overlay);

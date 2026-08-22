@@ -242,6 +242,15 @@
         <div class="stat-mini stat-mini--accent"><span>${I.get('check', 16)} Sisa</span><strong>${sum.sisa}</strong></div>
       </div>
 
+      <div class="potensi">
+        <span class="potensi__icon">${I.get('coins', 20)}</span>
+        <div class="potensi__body">
+          <span class="potensi__label">Kalau sisanya habis terjual</span>
+          <strong class="potensi__value">${U.rupiah(sum.nilaiSisa)}</strong>
+        </div>
+        <span class="potensi__note">perkiraan dari harga jual, belum dikurangi diskon</span>
+      </div>
+
       ${!sum.diaturCount ? `
         <div class="notice notice--info">
           ${I.get('info', 18)}
@@ -373,7 +382,9 @@
         <div class="stock-row__right">
           <span class="stock-row__left-label">Sisa</span>
           <strong class="stock-row__left">${r.diatur ? r.sisa : '–'}</strong>
-          ${!r.diatur ? '<span class="stock-row__unset">belum diatur</span>' : ''}
+          ${r.diatur
+            ? `<span class="stock-row__money">${r.sisa > 0 ? U.rupiah(r.nilaiSisa) : '&nbsp;'}</span>`
+            : '<span class="stock-row__unset">belum diatur</span>'}
         </div>
       </li>`;
   }

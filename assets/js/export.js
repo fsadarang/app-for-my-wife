@@ -393,14 +393,16 @@ ${list.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxm
    * yang terjual, yang di-keep untuk pre-order, dan yang masih sisa.
    */
   function stockRows(from, to) {
-    const rows = [['Tanggal', 'Menu', 'Dibuat', 'Terjual', 'Ter-keep (Pre-Order)', 'Sisa']];
+    const rows = [['Tanggal', 'Menu', 'Dibuat', 'Terjual', 'Ter-keep (Pre-Order)', 'Sisa',
+                   'Harga Satuan', 'Nilai Sisa']];
     const dates = Array.from(new Set((S().get().stocks || [])
       .map(s => s.date)
       .filter(d => (!from || d >= from) && (!to || d <= to)))).sort();
     dates.forEach(date => {
       S().stockOverview(date)
         .filter(r => r.diatur)
-        .forEach(r => rows.push([date, r.name, r.dibuat, r.terjual, r.dikeep, r.sisa]));
+        .forEach(r => rows.push([date, r.name, r.dibuat, r.terjual, r.dikeep, r.sisa,
+          r.price, r.nilaiSisa]));
     });
     return rows;
   }

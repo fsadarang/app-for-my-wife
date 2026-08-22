@@ -788,7 +788,13 @@
     });
 
     return Array.from(rows.values())
-      .map(r => { r.sisa = r.dibuat - r.terjual - r.dikeep; return r; })
+      .map(r => {
+        r.sisa = r.dibuat - r.terjual - r.dikeep;
+        // Perkiraan uang yang masih bisa didapat kalau sisanya habis terjual.
+        // Sisa minus tidak bisa menghasilkan uang, jadi dihitung nol.
+        r.nilaiSisa = Math.max(0, r.sisa) * (r.price || 0);
+        return r;
+      })
       .sort((a, b) => {
         if (a.active !== b.active) return a.active ? -1 : 1;
         if (a.group !== b.group) return String(a.group).localeCompare(String(b.group));
@@ -812,6 +818,10 @@
       // Sisa hanya dijumlahkan dari menu yang stoknya memang diatur,
       // supaya penjualan menu tanpa catatan stok tidak bikin angka minus.
       sisa: U.sum(diatur, r => r.sisa),
+      // Perkiraan pemasukan kalau seluruh sisa habis terjual. Ini memakai
+      // harga jual saat ini dan belum memperhitungkan diskon, jadi angkanya
+      // perkiraan — bukan uang yang sudah di tangan.
+      nilaiSisa: U.sum(diatur, r => r.nilaiSisa),
       habis: diatur.filter(r => r.sisa <= 0).length,
       menipis: diatur.filter(r => r.sisa > 0 && r.sisa <= LOW_STOCK).length
     };
