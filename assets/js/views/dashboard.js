@@ -147,6 +147,7 @@
             <div>
               <h2 class="card__title">${I.get('package', 18)} Stok Hari Ini</h2>
               <p class="card__sub">${stok.dibuat} dibuat • ${stok.terjual} terjual • ${stok.dikeep} di-keep • <b>sisa ${stok.sisa}</b></p>
+              <p class="card__sub card__sub--money">${I.get('coins', 13)} Kalau sisanya habis terjual: <b>${U.rupiah(stok.nilaiSisa)}</b></p>
             </div>
             <a class="link" href="#/menu?tab=stok">Atur stok ${I.get('chevronRight', 14)}</a>
           </div>
