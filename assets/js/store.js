@@ -6,7 +6,7 @@
 
   const U = global.Utils;
   const KEY = 'dapurku.data.v1';
-  const SCHEMA = 4;   // 4: stok harian per varian menu
+  const SCHEMA = 5;   // 5: penanda waktu perubahan + daftar penghapusan (untuk sinkronisasi)
   const LOW_STOCK = 5;   // sisa segini atau kurang dianggap "menipis"
 
   /* ---------- Data bawaan ---------- */
@@ -64,6 +64,7 @@
       transactions: [],
       preorders: [],
       stocks: [],
+      deletions: [],
       meta: { createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
     };
   }
@@ -119,6 +120,9 @@
     if (!Array.isArray(s.preorders)) s.preorders = [];
     // Skema 3 -> 4: catatan lama belum punya catatan stok harian.
     if (!Array.isArray(s.stocks)) s.stocks = [];
+    // Skema 4 -> 5: daftar penghapusan, dipakai agar catatan yang dihapus
+    // di satu perangkat tidak "hidup lagi" saat perangkat lain menyusul.
+    if (!Array.isArray(s.deletions)) s.deletions = [];
     if (!Array.isArray(s.expenseCategories) || !s.expenseCategories.length) {
       s.expenseCategories = U.deepClone(DEFAULT_EXPENSE_CATEGORIES);
     }
@@ -153,14 +157,55 @@
    * Untuk buku penjualan, kelebihan satu catatan jauh lebih ringan
    * akibatnya daripada kehilangan penjualan sungguhan.
    */
-  function mergeById(mine, theirs) {
+  function mergeById(mine, theirs, buangan) {
     if (!Array.isArray(mine) || !Array.isArray(theirs)) return 0;
     const known = new Set(mine.map(x => x && x.id));
     let added = 0;
     theirs.forEach(x => {
-      if (x && x.id && !known.has(x.id)) { mine.push(x); added++; }
+      if (!x || !x.id || known.has(x.id)) return;
+      // Catatan yang sudah sengaja dihapus jangan ditarik kembali.
+      if (buangan && buangan.has(x.id)) return;
+      mine.push(x);
+      added++;
     });
     return added;
+  }
+
+  /* ---------- Penanda perubahan (dipakai untuk sinkronisasi) ---------- */
+
+  /**
+   * Tiap catatan membawa waktu perubahan terakhirnya. Nanti dipakai untuk
+   * menentukan versi mana yang lebih baru kalau satu catatan diubah dari
+   * dua perangkat berbeda.
+   */
+  function stamp(rec) {
+    if (rec) rec.updatedAt = new Date().toISOString();
+    return rec;
+  }
+
+  /**
+   * Catat bahwa sebuah id dihapus.
+   *
+   * Tanpa ini, menghapus transaksi di HP tidak ada gunanya: begitu tablet
+   * ikut sinkron, transaksi yang sama akan dikirim balik dan muncul lagi.
+   * Yang disimpan hanya id dan waktunya — sangat kecil.
+   */
+  function markDeleted(id) {
+    if (!id) return;
+    const at = new Date().toISOString();
+    const found = state.deletions.find(d => d.id === id);
+    if (found) found.at = at;
+    else state.deletions.push({ id: id, at: at });
+  }
+
+  /** Batalkan penanda hapus — dipakai tombol "Batalkan" setelah menghapus */
+  function unmarkDeleted(id) {
+    const i = state.deletions.findIndex(d => d.id === id);
+    if (i >= 0) state.deletions.splice(i, 1);
+  }
+
+  function deletedIds() {
+    return new Set(state.deletions.map(d => d.id));
   }
 
   function mergeExternalChanges() {
@@ -173,13 +218,38 @@
     // Hanya digabung bila penyimpanan memang lebih baru daripada yang
     // terakhir kita baca/tulis sendiri.
     if (!otherAt || (lastSeenAt && otherAt <= lastSeenAt)) return 0;
-    const added = mergeById(state.transactions, other.transactions) +
-      mergeById(state.preorders, other.preorders) +
-      mergeById(state.stocks, other.stocks) +
-      mergeById(state.products, other.products) +
-      mergeById(state.expenseCategories, other.expenseCategories);
+
+    // Daftar penghapusan digabung lebih dulu, supaya catatan yang dihapus
+    // di jendela lain tidak ikut ditarik masuk pada langkah berikutnya.
+    mergeById(state.deletions, other.deletions);
+    const buangan = deletedIds();
+
+    const added = mergeById(state.transactions, other.transactions, buangan) +
+      mergeById(state.preorders, other.preorders, buangan) +
+      mergeById(state.stocks, other.stocks, buangan) +
+      mergeById(state.products, other.products, buangan) +
+      mergeById(state.expenseCategories, other.expenseCategories, buangan);
+
+    // Catatan yang dihapus di jendela lain ikut dibuang dari salinan ini.
+    dropDeletedLocally(buangan);
+
     lastSeenAt = otherAt;
     return added;
+  }
+
+  /** Buang catatan yang idnya sudah masuk daftar penghapusan */
+  function dropDeletedLocally(buangan) {
+    if (!buangan || !buangan.size) return 0;
+    let hilang = 0;
+    ['transactions', 'preorders', 'stocks', 'products', 'expenseCategories'].forEach(key => {
+      for (let i = state[key].length - 1; i >= 0; i--) {
+        // Kategori pengeluaran terakhir tidak boleh ikut hilang — tanpa
+        // satu pun kategori, pencatatan pengeluaran jadi tidak bisa dipakai.
+        if (key === 'expenseCategories' && state[key].length <= 1) break;
+        if (buangan.has(state[key][i].id)) { state[key].splice(i, 1); hilang++; }
+      }
+    });
+    return hilang;
   }
 
   /**
@@ -288,6 +358,7 @@
       active: data.active !== false,
       createdAt: new Date().toISOString()
     };
+    stamp(p);
     state.products.push(p);
     commit();
     return p;
@@ -302,6 +373,7 @@
     if (patch.cost != null) p.cost = Math.max(0, Number(patch.cost) || 0);
     if (patch.group != null) p.group = patch.group;
     if (patch.active != null) p.active = !!patch.active;
+    stamp(p);
     commit();
     return p;
   }
@@ -310,6 +382,7 @@
     const i = state.products.findIndex(x => x.id === id);
     if (i < 0) return null;
     const [removed] = state.products.splice(i, 1);
+    markDeleted(removed.id);
     commit();
     return removed;
   }
@@ -328,6 +401,7 @@
       color: data.color || '#94a3b8',
       tip: data.tip || ''
     };
+    stamp(c);
     state.expenseCategories.push(c);
     commit();
     return c;
@@ -341,6 +415,7 @@
       emoji: patch.emoji != null ? patch.emoji : c.emoji,
       color: patch.color != null ? patch.color : c.color
     });
+    stamp(c);
     commit();
     return c;
   }
@@ -353,8 +428,9 @@
     // Pindahkan transaksi lama ke kategori "Lain-lain" bila ada, atau kategori pertama.
     const fallback = state.expenseCategories.find(c => c.id === 'cat_lain') || state.expenseCategories[0];
     state.transactions.forEach(t => {
-      if (t.type === 'expense' && t.categoryId === id) t.categoryId = fallback.id;
+      if (t.type === 'expense' && t.categoryId === id) { t.categoryId = fallback.id; stamp(t); }
     });
+    markDeleted(removed.id);
     commit();
     return removed;
   }
@@ -413,6 +489,7 @@
       note: (data.note || '').trim(),
       createdAt: new Date().toISOString()
     };
+    stamp(t);
     state.transactions.push(t);
     commit();
     return t;
@@ -430,6 +507,7 @@
       note: (data.note || '').trim(),
       createdAt: new Date().toISOString()
     };
+    stamp(t);
     state.transactions.push(t);
     commit();
     return t;
@@ -466,6 +544,7 @@
       // diberikan bisa saja berubah saat transaksi diperbaiki.
       t.change = (t.cashGiven || 0) > 0 ? Math.max(0, t.cashGiven - t.total) : 0;
     }
+    stamp(t);
     commit();
     return t;
   }
@@ -474,6 +553,7 @@
     const i = state.transactions.findIndex(x => x.id === id);
     if (i < 0) return null;
     const [removed] = state.transactions.splice(i, 1);
+    markDeleted(removed.id);
     commit();
     return { item: removed, index: i };
   }
@@ -482,6 +562,8 @@
   function restoreTransaction(item, index) {
     if (!item) return;
     const at = typeof index === 'number' ? U.clamp(index, 0, state.transactions.length) : state.transactions.length;
+    unmarkDeleted(item.id);
+    stamp(item);
     state.transactions.splice(at, 0, item);
     commit();
   }
@@ -518,6 +600,7 @@
       completedAt: null,
       transactionId: null          // diisi saat pre-order diselesaikan
     };
+    stamp(po);
     state.preorders.push(po);
     commit();
     return po;
@@ -537,6 +620,7 @@
       po.total = U.sum(po.items, it => it.qty * it.price);
       po.hpp = U.sum(po.items, it => it.qty * it.cost);
     }
+    stamp(po);
     commit();
     return po;
   }
@@ -545,6 +629,7 @@
     const i = state.preorders.findIndex(x => x.id === id);
     if (i < 0) return null;
     const [removed] = state.preorders.splice(i, 1);
+    markDeleted(removed.id);
     commit();
     return { item: removed, index: i };
   }
@@ -552,6 +637,8 @@
   function restorePreorder(item, index) {
     if (!item) return;
     const at = typeof index === 'number' ? U.clamp(index, 0, state.preorders.length) : state.preorders.length;
+    unmarkDeleted(item.id);
+    stamp(item);
     state.preorders.splice(at, 0, item);
     commit();
   }
@@ -580,6 +667,7 @@
     po.status = 'selesai';
     po.completedAt = new Date().toISOString();
     po.transactionId = trx.id;
+    stamp(po);
     commit();
     return trx;
   }
@@ -592,6 +680,7 @@
     po.status = 'menunggu';
     po.completedAt = null;
     po.transactionId = null;
+    stamp(po);
     commit();
     return po;
   }
@@ -683,6 +772,7 @@
       note: (data.note || '').trim(),
       createdAt: new Date().toISOString()
     };
+    stamp(s);
     state.stocks.push(s);
     commit();
     return s;
@@ -707,6 +797,7 @@
     const i = state.stocks.findIndex(x => x.id === id);
     if (i < 0) return null;
     const [removed] = state.stocks.splice(i, 1);
+    markDeleted(removed.id);
     commit();
     return { item: removed, index: i };
   }
@@ -714,6 +805,8 @@
   function restoreStockEntry(item, index) {
     if (!item) return;
     const at = typeof index === 'number' ? U.clamp(index, 0, state.stocks.length) : state.stocks.length;
+    unmarkDeleted(item.id);
+    stamp(item);
     state.stocks.splice(at, 0, item);
     commit();
   }
@@ -966,11 +1059,11 @@
   function seedProducts() {
     SAMPLE_PRODUCTS.forEach(p => {
       if (!state.products.some(x => x.name.toLowerCase() === p.name.toLowerCase())) {
-        state.products.push({
+        state.products.push(stamp({
           id: U.uid('prd'),
           name: p.name, emoji: p.emoji, price: p.price, cost: p.cost,
           group: p.group, active: true, createdAt: new Date().toISOString()
-        });
+        }));
       }
     });
     commit();
@@ -1057,7 +1150,7 @@
     const method = data.method || 'tunai';
     // Pada pembayaran tunai, uang biasanya dibulatkan ke atas.
     const cashGiven = method === 'tunai' ? Math.ceil(subtotal / 5000) * 5000 : 0;
-    state.transactions.push({
+    state.transactions.push(stamp({
       id: U.uid('trx'), type: 'income', date: data.date, time: data.time,
       customerName: data.customerName || '',
       items, subtotal, discount: 0, total: subtotal,
@@ -1067,36 +1160,53 @@
       change: cashGiven > 0 ? Math.max(0, cashGiven - subtotal) : 0,
       note: data.note || '',
       createdAt: new Date().toISOString(), demo: true
-    });
+    }));
   }
 
   function addExpenseSilent(data) {
-    state.transactions.push({
+    state.transactions.push(stamp({
       id: U.uid('trx'), type: 'expense', date: data.date, time: data.time,
       categoryId: data.categoryId, total: data.total, method: 'tunai',
       note: data.note || '', createdAt: new Date().toISOString(), demo: true
-    });
+    }));
   }
 
   function hasDemoData() {
     return state.transactions.some(t => t.demo);
   }
 
+  // Penghapusan borongan wajib ikut dicatat satu per satu. Kalau tidak,
+  // begitu perangkat lain menyusul sinkron, semua yang barusan dibuang
+  // akan dikirim balik dan muncul lagi.
+
   function clearDemoData() {
+    state.transactions.forEach(t => { if (t.demo) markDeleted(t.id); });
     state.transactions = state.transactions.filter(t => !t.demo);
     commit();
   }
 
   function resetAll() {
+    // Penanda hapus dikumpulkan dulu, lalu dibawa ke keadaan baru, supaya
+    // "mulai dari nol" juga berlaku di perangkat lain — bukan cuma di sini.
+    const sebelumnya = [];
+    ['transactions', 'preorders', 'stocks', 'products', 'expenseCategories'].forEach(key => {
+      state[key].forEach(x => { if (x && x.id) sebelumnya.push(x.id); });
+    });
+    const at = new Date().toISOString();
+    const lama = state.deletions.slice();
+
     state = defaultState();
     state.settings.onboarded = false;
+    state.deletions = lama.concat(sebelumnya.map(id => ({ id: id, at: at })));
     commit();
   }
 
   function clearTransactions() {
-    state.transactions = [];
+    state.transactions.forEach(t => markDeleted(t.id));
     // Catatan stok ikut dibersihkan: tanpa transaksinya, angka
     // "dibuat 70, terjual 0" hanya akan membingungkan.
+    state.stocks.forEach(s => markDeleted(s.id));
+    state.transactions = [];
     state.stocks = [];
     commit();
   }
@@ -1112,6 +1222,11 @@
     }
     state = migrate(parsed);
     state.settings.onboarded = true;
+    // Seluruh isi cadangan ditandai baru saja berubah. Memulihkan cadangan
+    // artinya "yang ini yang benar", jadi harus menang atas versi lama yang
+    // mungkin masih ada di server.
+    ['transactions', 'preorders', 'stocks', 'products', 'expenseCategories']
+      .forEach(key => state[key].forEach(stamp));
     commit();
     return state;
   }
@@ -1127,6 +1242,7 @@
     completePreorder, reopenPreorder, pendingPreorders, preorderSummary, productionPlan,
     stockEntries, stockMade, hasStockRecord, addStockEntry, setStockMade,
     removeStockEntry, restoreStockEntry, stockOverview, stockSummary,
+    stamp, markDeleted, unmarkDeleted, deletedIds, dropDeletedLocally,
     inRange, sortedDesc, summary, cashBalance, dailySeries, topProducts,
     expenseByCategory, incomeByMethod, firstDate, customersByDay,
     seedProducts, seedDemoTransactions, hasDemoData, clearDemoData,
