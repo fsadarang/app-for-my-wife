@@ -176,9 +176,11 @@
     }
 
     if (!akunSebelumnya) {
-      // Pertama kali akun ini dipakai di sini: semua yang ada di HP
-      // dijadikan antrean kirim.
-      const jumlah = S.markAllDirty();
+      // Pertama kali akun ini dipakai di sini: apa yang ada di perangkat
+      // dijadikan antrean kirim. Perangkat yang masih kosong hanya mengirim
+      // yang benar-benar pernah disentuh, supaya bawaan pabrik miliknya
+      // tidak menimpa data sungguhan di perangkat lain.
+      const jumlah = S.markAllDirty(!S.hasUserContent());
       st.meta.uid = uid;
       st.meta.pulledAt = '';
       S.commit();

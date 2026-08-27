@@ -212,11 +212,34 @@
     if (state.meta.dirty.indexOf(id) < 0) state.meta.dirty.push(id);
   }
 
-  /** Semua catatan ditandai belum terkirim — dipakai saat pertama kali login */
-  function markAllDirty() {
+  /** Apakah perangkat ini sudah dipakai mencatat, atau masih kosong? */
+  function hasUserContent() {
+    return !!(state.transactions.length || state.products.length ||
+      state.preorders.length || state.stocks.length);
+  }
+
+  /**
+   * Semua catatan ditandai belum terkirim — dipakai saat pertama kali login.
+   *
+   * `hanyaYangTersentuh` menutup satu lubang berbahaya. Tiap perangkat baru
+   * otomatis punya 9 kategori pengeluaran bawaan dengan id yang SAMA PERSIS
+   * seperti di perangkat lama. Kalau tablet yang masih kosong mendorong
+   * kategori bawaannya, kategori yang sudah diubah namanya di HP akan
+   * tertimpa — padahal tablet itu belum dipakai mencatat apa pun.
+   *
+   * Jadi: perangkat yang sudah berisi catatan mendorong semuanya (catatan
+   * lama hasil migrasi memang belum punya updatedAt, dan tetap harus naik).
+   * Perangkat yang masih kosong hanya mendorong yang benar-benar pernah
+   * disentuh pengguna — yaitu yang sudah punya updatedAt.
+   */
+  function markAllDirty(hanyaYangTersentuh) {
     state.meta.dirty = [];
     SYNCED_KEYS.forEach(key => {
-      state[key].forEach(x => { if (x && x.id) state.meta.dirty.push(x.id); });
+      state[key].forEach(x => {
+        if (!x || !x.id) return;
+        if (hanyaYangTersentuh && !x.updatedAt) return;
+        state.meta.dirty.push(x.id);
+      });
     });
     state.deletions.forEach(d => markDirty(d.id));
     return state.meta.dirty.length;
@@ -1356,7 +1379,7 @@
     stockEntries, stockMade, hasStockRecord, addStockEntry, setStockMade,
     removeStockEntry, restoreStockEntry, stockOverview, stockSummary,
     stamp, markDeleted, unmarkDeleted, deletedIds, dropDeletedLocally,
-    SYNCED_KEYS, markDirty, markAllDirty, clearDirty, dirtyIds, applyRemote,
+    SYNCED_KEYS, markDirty, markAllDirty, clearDirty, dirtyIds, applyRemote, hasUserContent,
     inRange, sortedDesc, summary, cashBalance, dailySeries, topProducts,
     expenseByCategory, incomeByMethod, firstDate, customersByDay,
     seedProducts, seedDemoTransactions, hasDemoData, clearDemoData,
