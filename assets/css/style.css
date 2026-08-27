@@ -1813,6 +1813,49 @@ kbd {
 .btn.is-disabled:hover, .btn:disabled:hover { transform: none; }
 
 /* =========================================================
+   Akun & sinkronisasi
+   ========================================================= */
+
+.auth-card { max-width: 460px; }
+.auth-card .seg--tabs { align-self: stretch; margin-bottom: 4px; }
+.auth-note { margin-top: 4px; text-align: left; }
+
+.pass-input { position: relative; display: flex; align-items: center; }
+.pass-input input { width: 100%; padding-right: 44px !important; }
+.pass-input__eye {
+  position: absolute; right: 6px; width: 32px; height: 32px;
+  display: grid; place-items: center; border: none; background: transparent;
+  color: var(--text-3); cursor: pointer; border-radius: var(--r-sm);
+}
+.pass-input__eye:hover { background: var(--surface-3); color: var(--text); }
+.pass-input__eye.is-on { color: var(--primary); background: var(--primary-soft); }
+
+.auth-msg {
+  display: flex; align-items: flex-start; gap: 7px; text-align: left;
+  padding: 10px 12px; border-radius: var(--r); font-size: .83rem; line-height: 1.45;
+}
+.auth-msg.is-bad { background: var(--expense-soft); color: var(--expense); }
+.auth-msg.is-good { background: var(--income-soft); color: var(--income); }
+.auth-msg svg { flex: none; margin-top: 2px; }
+
+.card--akun { border-color: color-mix(in srgb, var(--cash) 28%, var(--border)); }
+.akun-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: var(--r-md);
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.akun-row__avatar {
+  width: 40px; height: 40px; flex: none; display: grid; place-items: center;
+  border-radius: 50%; background: var(--cash-soft); color: var(--cash);
+}
+.akun-row__body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.akun-row__email {
+  font-size: .93rem; font-weight: 700;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.akun-row__meta { font-size: .76rem; color: var(--text-3); }
+
+/* =========================================================
    Stok harian per varian
    ========================================================= */
 

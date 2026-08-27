@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// =========================================================
+// Aturan keamanan Firestore untuk Dapur Kita
+//
+// Inti aturannya satu kalimat: tiap akun hanya boleh menyentuh datanya
+// sendiri. Tidak ada satu pun jalur yang membuat akun A bisa membaca
+// atau mengubah catatan akun B.
+//
+// Cara memasang:
+//   Firebase Console -> Build -> Firestore Database -> tab "Rules"
+//   -> ganti seluruh isinya dengan berkas ini -> Publish
+// =========================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Semua data pengguna berada di bawah /pengguna/{uid}/...
+    // {sisa=**} mencakup seluruh kelompok di dalamnya: transaksi, menu,
+    // preorder, stok, kategori, dihapus, dan pengaturan.
+    match /pengguna/{uid}/{sisa=**} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == uid;
+    }
+
+    // Apa pun di luar itu ditolak. Ditulis tegas supaya tidak ada
+    // jalur yang tidak sengaja terbuka di kemudian hari.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
