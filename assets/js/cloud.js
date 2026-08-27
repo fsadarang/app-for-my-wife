@@ -243,7 +243,20 @@
 
   const akar = () => '/pengguna/' + session.uid;
 
-  /** Satu catatan -> satu dokumen Firestore */
+  /**
+   * Satu catatan -> satu dokumen Firestore.
+   *
+   * Ada DUA tanda waktu, dan bedanya penting:
+   * - `updatedAt` : jam PERANGKAT. Dipakai hanya untuk menentukan versi
+   *                 mana yang menang kalau satu catatan disunting dari
+   *                 dua tempat.
+   * - `serverAt`  : jam SERVER, diisi Firestore sendiri saat menerima.
+   *                 Dipakai sebagai penanda "sudah sampai mana" waktu
+   *                 menarik. Tidak boleh memakai jam perangkat di sini:
+   *                 jam yang meleset, atau catatan yang tiba tidak
+   *                 berurutan, bisa membuat penanda melompat terlalu jauh
+   *                 sehingga catatan perangkat lain tidak pernah terlihat.
+   */
   function keDokumen(rec) {
     return {
       fields: {
@@ -252,6 +265,12 @@
         isi: { stringValue: JSON.stringify(rec) }
       }
     };
+  }
+
+  const TRANSFORM_SERVER = [{ fieldPath: 'serverAt', setToServerValue: 'REQUEST_TIME' }];
+
+  function docPath(sisa) {
+    return 'projects/' + CFG.projectId + '/databases/(default)/documents' + akar() + '/' + sisa;
   }
 
   function dariDokumen(doc) {
@@ -269,62 +288,60 @@
    * Firestore bisa membandingkan teks, dan format waktu ISO berurut secara
    * abjad, jadi perbandingan biasa sudah tepat.
    */
+  /**
+   * Ambil semua yang tiba di server setelah `sejak` (waktu server).
+   * Penyaringan dan pengurutan memakai `serverAt`, bukan jam perangkat.
+   */
   async function tarik(sejak) {
     const keluar = { records: [], deletions: [], terbaru: sejak || '' };
 
-    for (const key of Object.keys(COLLECTION)) {
-      const nama = COLLECTION[key];
-      const query = {
+    function bikinQuery(nama, batas) {
+      const q = {
         structuredQuery: {
           from: [{ collectionId: nama }],
-          orderBy: [{ field: { fieldPath: 'updatedAt' }, direction: 'ASCENDING' }],
-          limit: 2000
+          orderBy: [{ field: { fieldPath: 'serverAt' }, direction: 'ASCENDING' }],
+          limit: batas
         }
       };
       if (sejak) {
-        query.structuredQuery.where = {
+        q.structuredQuery.where = {
           fieldFilter: {
-            field: { fieldPath: 'updatedAt' },
+            field: { fieldPath: 'serverAt' },
             op: 'GREATER_THAN',
-            value: { stringValue: sejak }
+            value: { timestampValue: sejak }
           }
         };
       }
-      const hasil = await db(akar() + ':runQuery', { method: 'POST', body: query });
+      return q;
+    }
+
+    function catatServerAt(doc) {
+      const f = doc.fields || {};
+      const s = f.serverAt && f.serverAt.timestampValue;
+      if (s && s > keluar.terbaru) keluar.terbaru = s;
+      return s;
+    }
+
+    for (const key of Object.keys(COLLECTION)) {
+      const hasil = await db(akar() + ':runQuery', { method: 'POST', body: bikinQuery(COLLECTION[key], 2000) });
       (hasil || []).forEach(baris => {
         if (!baris.document) return;
         const rec = dariDokumen(baris.document);
         if (!rec) return;
         rec.__key = key;
         keluar.records.push(rec);
-        if (rec.updatedAt > keluar.terbaru) keluar.terbaru = rec.updatedAt;
+        catatServerAt(baris.document);
       });
     }
 
-    // Daftar penghapusan
-    const qHapus = {
-      structuredQuery: {
-        from: [{ collectionId: 'dihapus' }],
-        orderBy: [{ field: { fieldPath: 'updatedAt' }, direction: 'ASCENDING' }],
-        limit: 5000
-      }
-    };
-    if (sejak) {
-      qHapus.structuredQuery.where = {
-        fieldFilter: {
-          field: { fieldPath: 'updatedAt' }, op: 'GREATER_THAN', value: { stringValue: sejak }
-        }
-      };
-    }
-    const hasilHapus = await db(akar() + ':runQuery', { method: 'POST', body: qHapus });
+    const hasilHapus = await db(akar() + ':runQuery', { method: 'POST', body: bikinQuery('dihapus', 5000) });
     (hasilHapus || []).forEach(baris => {
       if (!baris.document) return;
       const f = baris.document.fields || {};
       const id = f.id && f.id.stringValue;
-      const at = f.updatedAt && f.updatedAt.stringValue;
       if (!id) return;
-      keluar.deletions.push({ id: id, at: at });
-      if (at && at > keluar.terbaru) keluar.terbaru = at;
+      keluar.deletions.push({ id: id, at: (f.updatedAt && f.updatedAt.stringValue) || '' });
+      catatServerAt(baris.document);
     });
 
     return keluar;
@@ -338,30 +355,26 @@
     const writes = [];
 
     (records || []).forEach(rec => {
-      const key = rec.__key;
-      const nama = COLLECTION[key];
+      const nama = COLLECTION[rec.__key];
       if (!nama) return;
       const salinan = Object.assign({}, rec);
       delete salinan.__key;
       writes.push({
-        update: Object.assign(
-          { name: 'projects/' + CFG.projectId + '/databases/(default)/documents' +
-                  akar() + '/' + nama + '/' + rec.id },
-          keDokumen(salinan)
-        )
+        update: Object.assign({ name: docPath(nama + '/' + rec.id) }, keDokumen(salinan)),
+        updateTransforms: TRANSFORM_SERVER
       });
     });
 
     (deletions || []).forEach(d => {
       writes.push({
         update: {
-          name: 'projects/' + CFG.projectId + '/databases/(default)/documents' +
-                akar() + '/dihapus/' + d.id,
+          name: docPath('dihapus/' + d.id),
           fields: {
             id: { stringValue: String(d.id) },
             updatedAt: { stringValue: String(d.at || new Date().toISOString()) }
           }
-        }
+        },
+        updateTransforms: TRANSFORM_SERVER
       });
     });
 

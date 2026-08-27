@@ -28,6 +28,14 @@
 
   const JEDA = 20000;        // sinkron berkala tiap 20 detik
 
+  /** Mundurkan sebuah waktu ISO sekian milidetik */
+  function mundurkan(iso, ms) {
+    if (!iso) return '';
+    const t = Date.parse(iso);
+    if (isNaN(t)) return '';
+    return new Date(t - ms).toISOString();
+  }
+
   function onStatus(fn) {
     pendengar.push(fn);
     return () => {
@@ -116,16 +124,23 @@
       }
 
       /* --- 2. TARIK --- */
-      const sejak = st.meta.pulledAt || '';
-      const masuk = await C.tarik(sejak);
+      // Penandanya sengaja dimundurkan sedikit. Sebuah catatan bisa saja
+      // tercatat di server tepat pada detik yang sama dengan tarikan
+      // sebelumnya dan luput terbawa. Mundur satu menit membuat beberapa
+      // catatan terbaca ulang — dan itu tidak apa-apa, karena catatan yang
+      // sudah sama tidak akan menimpa apa pun.
+      const masuk = await C.tarik(mundurkan(st.meta.pulledAt, 60000));
       if (masuk.records.length || masuk.deletions.length) {
         const hasil = S.applyRemote(masuk.records, masuk.deletions);
         ringkasan.baru = hasil.baru;
         ringkasan.diperbarui = hasil.diperbarui;
         ringkasan.dihapus = hasil.dihapus;
       }
-      // Penanda "sudah sampai mana" memakai waktu dari catatan server,
-      // bukan jam HP — supaya jam yang meleset tidak melewatkan catatan.
+      // Penanda "sudah sampai mana" memakai jam SERVER (field serverAt),
+      // bukan jam perangkat. Jam perangkat yang meleset — atau catatan yang
+      // tiba tidak berurutan saat banyak perangkat mengirim bersamaan —
+      // bisa membuat penanda melompat terlalu jauh, dan catatan perangkat
+      // lain tidak akan pernah terlihat lagi.
       if (masuk.terbaru && masuk.terbaru > (S.get().meta.pulledAt || '')) {
         S.get().meta.pulledAt = masuk.terbaru;
       }
