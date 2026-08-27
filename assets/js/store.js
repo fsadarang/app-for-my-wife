@@ -7,6 +7,9 @@
   const U = global.Utils;
   const KEY = 'dapurku.data.v1';
   const SCHEMA = 5;   // 5: penanda waktu perubahan + daftar penghapusan (untuk sinkronisasi)
+
+  // Kelompok catatan yang ikut disinkronkan antar perangkat
+  const SYNCED_KEYS = ['transactions', 'products', 'preorders', 'stocks', 'expenseCategories'];
   const LOW_STOCK = 5;   // sisa segini atau kurang dianggap "menipis"
 
   /* ---------- Data bawaan ---------- */
@@ -65,7 +68,13 @@
       preorders: [],
       stocks: [],
       deletions: [],
-      meta: { createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+      meta: {
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        dirty: [],        // id yang belum terkirim ke server
+        pulledAt: '',     // waktu perubahan terbaru yang sudah diambil dari server
+        uid: ''           // akun yang datanya sedang dipegang salinan ini
+      }
     };
   }
 
@@ -123,6 +132,9 @@
     // Skema 4 -> 5: daftar penghapusan, dipakai agar catatan yang dihapus
     // di satu perangkat tidak "hidup lagi" saat perangkat lain menyusul.
     if (!Array.isArray(s.deletions)) s.deletions = [];
+    if (!Array.isArray(s.meta.dirty)) s.meta.dirty = [];
+    if (typeof s.meta.pulledAt !== 'string') s.meta.pulledAt = '';
+    if (typeof s.meta.uid !== 'string') s.meta.uid = '';
     if (!Array.isArray(s.expenseCategories) || !s.expenseCategories.length) {
       s.expenseCategories = U.deepClone(DEFAULT_EXPENSE_CATEGORIES);
     }
@@ -179,8 +191,46 @@
    * dua perangkat berbeda.
    */
   function stamp(rec) {
-    if (rec) rec.updatedAt = new Date().toISOString();
+    if (!rec) return rec;
+    rec.updatedAt = new Date().toISOString();
+    markDirty(rec.id);
     return rec;
+  }
+
+  /**
+   * Tandai satu catatan sebagai "belum terkirim ke server".
+   *
+   * Daftar ini dipakai sebagai antrean kirim, bukan perbandingan waktu.
+   * Alasannya: jam di HP bisa saja salah. Kalau antrean kirim bergantung
+   * pada jam, penjualan bisa terlewat tidak terkirim tanpa ketahuan.
+   * Dengan daftar tegas seperti ini, sebuah catatan baru hilang dari
+   * antrean setelah servernya benar-benar menerima.
+   */
+  function markDirty(id) {
+    if (!id) return;
+    if (!Array.isArray(state.meta.dirty)) state.meta.dirty = [];
+    if (state.meta.dirty.indexOf(id) < 0) state.meta.dirty.push(id);
+  }
+
+  /** Semua catatan ditandai belum terkirim — dipakai saat pertama kali login */
+  function markAllDirty() {
+    state.meta.dirty = [];
+    SYNCED_KEYS.forEach(key => {
+      state[key].forEach(x => { if (x && x.id) state.meta.dirty.push(x.id); });
+    });
+    state.deletions.forEach(d => markDirty(d.id));
+    return state.meta.dirty.length;
+  }
+
+  /** Dipanggil setelah server benar-benar menerima catatan-catatan ini */
+  function clearDirty(ids) {
+    if (!ids || !ids.length) return;
+    const selesai = new Set(ids);
+    state.meta.dirty = (state.meta.dirty || []).filter(id => !selesai.has(id));
+  }
+
+  function dirtyIds() {
+    return (state.meta.dirty || []).slice();
   }
 
   /**
@@ -196,6 +246,7 @@
     const found = state.deletions.find(d => d.id === id);
     if (found) found.at = at;
     else state.deletions.push({ id: id, at: at });
+    markDirty(id);   // penghapusan juga harus sampai ke perangkat lain
   }
 
   /** Batalkan penanda hapus — dipakai tombol "Batalkan" setelah menghapus */
@@ -326,6 +377,68 @@
 
   function get() { return state; }
   function isStorageOK() { return storageOK; }
+
+  /**
+   * Masukkan catatan yang datang dari server ke salinan lokal.
+   *
+   * Aturannya:
+   * - Catatan yang sudah ditandai dihapus di sini TIDAK ditarik masuk.
+   * - Catatan baru langsung ditambahkan.
+   * - Catatan yang sudah ada hanya ditimpa kalau versi dari server memang
+   *   LEBIH BARU. Kalau versi di sini yang lebih baru, punya kita menang
+   *   dan tetap masuk antrean kirim.
+   * - Yang masuk dari server tidak ditandai perlu dikirim balik.
+   *
+   * Mengembalikan ringkasan apa saja yang berubah, untuk ditampilkan
+   * dan untuk menentukan apakah layar perlu digambar ulang.
+   */
+  function applyRemote(masuk, hapusan) {
+    const hasil = { baru: 0, diperbarui: 0, dilewati: 0, dihapus: 0 };
+
+    // Penghapusan dari server diproses lebih dulu, supaya catatan yang
+    // sudah dibuang di perangkat lain tidak sempat masuk lagi di bawah.
+    (hapusan || []).forEach(d => {
+      if (!d || !d.id) return;
+      const sudahAda = state.deletions.find(x => x.id === d.id);
+      if (!sudahAda) state.deletions.push({ id: d.id, at: d.at || new Date().toISOString() });
+    });
+    const buangan = deletedIds();
+    hasil.dihapus = dropDeletedLocally(buangan);
+
+    const perKey = {};
+    SYNCED_KEYS.forEach(key => {
+      perKey[key] = new Map(state[key].map(x => [x.id, x]));
+    });
+
+    (masuk || []).forEach(rec => {
+      if (!rec || !rec.id || !rec.__key) return;
+      const key = rec.__key;
+      if (SYNCED_KEYS.indexOf(key) < 0) return;
+      delete rec.__key;
+
+      if (buangan.has(rec.id)) { hasil.dilewati++; return; }
+
+      const punyaKita = perKey[key].get(rec.id);
+      if (!punyaKita) {
+        state[key].push(rec);
+        perKey[key].set(rec.id, rec);
+        hasil.baru++;
+        return;
+      }
+      // Bandingkan umur. Tanpa updatedAt (catatan lama), anggap paling tua.
+      const kita = punyaKita.updatedAt || '';
+      const sana = rec.updatedAt || '';
+      if (sana > kita) {
+        Object.keys(punyaKita).forEach(k => { delete punyaKita[k]; });
+        Object.assign(punyaKita, rec);
+        hasil.diperbarui++;
+      } else {
+        hasil.dilewati++;
+      }
+    });
+
+    return hasil;
+  }
 
   /* ---------- Profil & pengaturan ---------- */
 
@@ -1243,6 +1356,7 @@
     stockEntries, stockMade, hasStockRecord, addStockEntry, setStockMade,
     removeStockEntry, restoreStockEntry, stockOverview, stockSummary,
     stamp, markDeleted, unmarkDeleted, deletedIds, dropDeletedLocally,
+    SYNCED_KEYS, markDirty, markAllDirty, clearDirty, dirtyIds, applyRemote,
     inRange, sortedDesc, summary, cashBalance, dailySeries, topProducts,
     expenseByCategory, incomeByMethod, firstDate, customersByDay,
     seedProducts, seedDemoTransactions, hasDemoData, clearDemoData,

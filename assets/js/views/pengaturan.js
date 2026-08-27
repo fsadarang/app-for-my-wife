@@ -5,7 +5,131 @@
   'use strict';
 
   const U = global.Utils, I = global.Icons, S = global.Store, UI = global.UI;
+  const Sy = global.Sync;
   global.Views = global.Views || {};
+
+  /* ---------- Kartu Akun & Sinkronisasi ---------- */
+
+  function waktuSingkat(iso) {
+    if (!iso) return 'belum pernah';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return 'belum pernah';
+    const lewat = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (lewat < 60) return 'baru saja';
+    if (lewat < 3600) return Math.floor(lewat / 60) + ' menit lalu';
+    if (lewat < 86400) return Math.floor(lewat / 3600) + ' jam lalu';
+    return U.formatDate(iso.slice(0, 10));
+  }
+
+  function akunCard() {
+    const C = global.Cloud;
+    if (!C || !C.isConfigured()) return '';
+    const user = C.currentUser();
+
+    if (!user) {
+      return `
+      <section class="card card--akun">
+        <div class="card__head">
+          <h2 class="card__title">${I.get('users', 18)} Akun &amp; Sinkronisasi</h2>
+        </div>
+        <div class="callout">
+          <span class="callout__emoji">📱</span>
+          <div>
+            <h3>Pakai di HP dan tablet sekaligus</h3>
+            <p>Dengan akun, catatan yang kamu buat di satu perangkat langsung muncul di perangkat lain.
+            Tanpa akun, aplikasi tetap bisa dipakai seperti biasa — catatan hanya tersimpan di perangkat ini.</p>
+          </div>
+          <button type="button" class="btn btn--primary" data-act="masuk">
+            ${I.get('arrowRight', 16)} Masuk / Daftar
+          </button>
+        </div>
+      </section>`;
+    }
+
+    const st = Sy ? Sy.status() : { belumTerkirim: 0, terakhirSinkron: '' };
+    const belum = st.belumTerkirim;
+    return `
+      <section class="card card--akun">
+        <div class="card__head">
+          <h2 class="card__title">${I.get('users', 18)} Akun &amp; Sinkronisasi</h2>
+          <span class="badge ${belum ? 'badge--warn' : 'badge--good'}">
+            ${belum ? belum + ' belum terkirim' : 'Tersinkron'}
+          </span>
+        </div>
+        <div class="akun-row">
+          <span class="akun-row__avatar">${I.get('users', 20)}</span>
+          <div class="akun-row__body">
+            <strong class="akun-row__email">${U.escapeHtml(user.email || '')}</strong>
+            <span class="akun-row__meta" data-sync-meta>
+              Terakhir disamakan ${waktuSingkat(st.terakhirSinkron)}
+            </span>
+          </div>
+        </div>
+        ${belum ? `
+          <div class="notice notice--info">
+            ${I.get('info', 18)}
+            <div>
+              <b>${belum} catatan menunggu dikirim.</b>
+              <span>Catatannya sudah aman tersimpan di perangkat ini. Begitu ada internet, otomatis menyusul ke akunmu.</span>
+            </div>
+          </div>` : ''}
+        <div class="setting-grid">
+          <button type="button" class="action-tile" data-act="sync-now">
+            <span class="action-tile__icon action-tile__icon--blue">${I.get('refresh', 22)}</span>
+            <span class="action-tile__title">Samakan Sekarang</span>
+            <span class="action-tile__text">Kirim dan ambil catatan terbaru dari akunmu</span>
+          </button>
+          <button type="button" class="action-tile" data-act="keluar">
+            <span class="action-tile__icon action-tile__icon--amber">${I.get('logout', 22)}</span>
+            <span class="action-tile__title">Keluar dari Akun</span>
+            <span class="action-tile__text">Catatan di perangkat ini tidak ikut terhapus</span>
+          </button>
+        </div>
+      </section>`;
+  }
+
+  function bindAkun(root) {
+    const C = global.Cloud;
+    const masuk = root.querySelector('[data-act=masuk]');
+    if (masuk) masuk.addEventListener('click', () => UI.navigate('masuk'));
+
+    const now = root.querySelector('[data-act=sync-now]');
+    if (now) now.addEventListener('click', async () => {
+      UI.toast('Menyamakan catatan…', 'info', 2500);
+      const hasil = await Sy.sekarang();
+      if (hasil.ok) {
+        UI.toast(hasil.berubah
+          ? `Selesai — ${hasil.berubah} catatan diperbarui`
+          : 'Selesai — semua sudah sama', 'success');
+      } else if (hasil.alasan === 'jaringan') {
+        UI.toast('Belum tersambung internet. Catatan tetap aman di HP dan akan menyusul otomatis.', 'warn', 7000);
+      } else if (hasil.alasan === 'sesi-habis') {
+        UI.toast('Sesi berakhir — silakan masuk lagi.', 'warn', 7000);
+      } else {
+        UI.toast('Gagal menyamakan. Catatan tetap aman di HP.', 'error', 7000);
+      }
+      render(root);
+    });
+
+    const keluar = root.querySelector('[data-act=keluar]');
+    if (keluar) keluar.addEventListener('click', async () => {
+      const st = Sy.status();
+      const ok = await UI.confirm({
+        title: 'Keluar dari akun?',
+        message: st.belumTerkirim
+          ? `Masih ada ${st.belumTerkirim} catatan yang belum terkirim ke akunmu. Kalau keluar sekarang, catatannya tetap ada di perangkat ini, tapi tidak akan muncul di perangkat lain. Sebaiknya samakan dulu.`
+          : 'Catatan di perangkat ini tidak ikut terhapus. Kamu bisa masuk lagi kapan saja.',
+        danger: !!st.belumTerkirim,
+        confirmText: 'Ya, keluar'
+      });
+      if (!ok) return;
+      Sy.berhentiBerkala();
+      C.signOut();
+      Sy.lupakanAkun();
+      UI.toast('Sudah keluar. Catatan di perangkat ini tetap utuh.', 'info', 5000);
+      render(root);
+    });
+  }
 
   function render(root) {
     const st = S.get();
@@ -104,10 +228,21 @@
         </div>
       </section>
 
+      ${akunCard()}
+
       <section class="card">
         <div class="card__head">
           <h2 class="card__title">${I.get('save', 18)} Cadangan &amp; Data</h2>
         </div>
+        ${global.Cloud && global.Cloud.currentUser() ? `
+        <div class="callout callout--info">
+          <span class="callout__emoji">☁️</span>
+          <div>
+            <h3>Catatanmu tersimpan di HP ini dan di akunmu</h3>
+            <p>Setiap catatan disimpan di HP dulu, lalu menyusul ke akun saat ada internet. Membuat cadangan
+            tetap dianjurkan sebagai pengaman tambahan.</p>
+          </div>
+        </div>` : `
         <div class="callout callout--info">
           <span class="callout__emoji">🔒</span>
           <div>
@@ -116,7 +251,7 @@
             Untuk memindahkannya, pakai <b>Pindah ke HP Lain</b> di bawah. Rutin simpan cadangan, apalagi sebelum ganti HP
             atau membersihkan data browser.</p>
           </div>
-        </div>
+        </div>`}
 
         <div class="setting-grid">
           <button type="button" class="action-tile action-tile--wide" data-act="transfer">
@@ -199,12 +334,13 @@
         </div>
       </section>
 
-      <p class="app-version">Dapur Kita • <b>versi 1.8</b> • dibuat dengan ❤️ untuk usaha makanan rumahan</p>`;
+      <p class="app-version">Dapur Kita • <b>versi 1.9</b> • dibuat dengan ❤️ untuk usaha makanan rumahan</p>`;
 
     bind(root);
   }
 
   function bind(root) {
+    bindAkun(root);
     const targetInput = root.querySelector('#setTarget');
     const cashInput = root.querySelector('#setCash');
     U.attachThousand(targetInput);

@@ -13,12 +13,13 @@
     { path: 'transaksi', label: 'Transaksi', icon: 'receipt', bottom: true },
     { path: 'laporan', label: 'Laporan', icon: 'chart', bottom: true },
     { path: 'menu', label: 'Menu', icon: 'book', bottom: true },
-    { path: 'pengaturan', label: 'Pengaturan', icon: 'settings', bottom: false }
+    { path: 'pengaturan', label: 'Pengaturan', icon: 'settings', bottom: false },
+    { path: 'masuk', label: 'Masuk', icon: 'users', bottom: false, tersembunyi: true }
   ];
 
   const TITLES = {
     dashboard: 'Beranda', kasir: 'Kasir', preorder: 'Pre-Order', transaksi: 'Transaksi',
-    laporan: 'Laporan', menu: 'Menu & Stok', pengaturan: 'Pengaturan'
+    laporan: 'Laporan', menu: 'Menu & Stok', pengaturan: 'Pengaturan', masuk: 'Masuk'
   };
 
   let viewRoot = null;      // <main id="view">
@@ -43,7 +44,7 @@
         </div>
 
         <nav class="nav" aria-label="Navigasi utama">
-          ${NAV.map(n => `
+          ${NAV.filter(n => !n.tersembunyi).map(n => `
             <a class="nav__item" href="#/${n.path}" data-nav="${n.path}">
               <span class="nav__icon">${I.get(n.icon, 20)}</span>
               <span class="nav__label">${n.label}</span>
@@ -340,6 +341,40 @@
     return false;
   }
 
+  /* ---------- Sinkronisasi antar perangkat ---------- */
+
+  /**
+   * Sinkronisasi sifatnya tambahan, bukan syarat. Kalau pengguna belum
+   * masuk, atau Firebase tidak bisa dihubungi sama sekali, aplikasi harus
+   * tetap berjalan persis seperti biasa — semua catatan tetap di HP.
+   */
+  function mulaiSinkronisasi() {
+    const C = global.Cloud, Sy = global.Sync;
+    if (!C || !Sy || !C.isConfigured()) return;
+
+    try { C.loadSession(); } catch (e) { console.error(e); }
+    if (!C.currentUser()) return;
+
+    Sy.pasangPemicu();
+    Sy.mulaiBerkala();
+
+    // Catatan yang masuk dari perangkat lain harus langsung terlihat.
+    Sy.onStatus(s => {
+      if (s.keadaan === 'siap') { refreshShell(); refreshCurrentView(); }
+      if (s.keadaan === 'keluar') {
+        Sy.berhentiBerkala();
+        UI.toast('Sesi akunmu berakhir. Catatan tetap aman di HP — silakan masuk lagi.', 'warn', 12000);
+      }
+    });
+
+    // Jangan tunda: catatan dari perangkat lain diambil begitu aplikasi dibuka.
+    Sy.sekarang().then(hasil => {
+      if (hasil.ok && hasil.berubah) {
+        UI.toast(`${hasil.berubah} catatan dari perangkat lain sudah masuk`, 'info', 5000);
+      }
+    });
+  }
+
   /* ---------- Mulai ---------- */
 
   function init() {
@@ -354,6 +389,7 @@
 
     bindShortcuts();
     checkOnboarding();
+    mulaiSinkronisasi();
 
     // Jaring pengaman saat aplikasi ditinggalkan.
     //
