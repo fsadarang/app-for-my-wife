@@ -319,7 +319,15 @@
   }
 
   /** Baris transaksi ringkas (dipakai juga di halaman lain) */
-  function trxRow(t) {
+  /**
+   * Satu baris transaksi, dipakai bersama oleh Beranda dan halaman Transaksi.
+   *
+   * `opts.pilih` menyalakan kotak centang untuk hapus borongan. Dijaga agar
+   * tetap aman dipanggil lewat .map() — argumen kedua dari map adalah angka
+   * indeks, dan itu diabaikan, bukan disalahartikan sebagai pengaturan.
+   */
+  function trxRow(t, opts) {
+    const o = (opts && typeof opts === 'object') ? opts : {};
     const isIncome = t.type === 'income';
     const cat = isIncome ? null : S.getCategory(t.categoryId);
     const method = S.PAYMENT_METHODS.find(m => m.id === t.method);
@@ -332,8 +340,15 @@
       : cat.name;
     const emoji = isIncome ? (t.items && t.items.length ? (t.items[0].emoji || '🧾') : '💰') : cat.emoji;
 
+    const dipilih = !!(o.pilih && o.terpilih && o.terpilih.has(t.id));
+
     return `
-      <li class="trx" data-trx="${t.id}" tabindex="0" role="button">
+      <li class="trx${o.pilih ? ' trx--pilih' : ''}${dipilih ? ' is-dipilih' : ''}"
+          data-trx="${t.id}" tabindex="0" role="${o.pilih ? 'checkbox' : 'button'}"
+          ${o.pilih ? `aria-checked="${dipilih}"` : ''}>
+        ${o.pilih ? `<span class="trx__check${dipilih ? ' is-on' : ''}" aria-hidden="true">
+          ${dipilih ? I.get('check', 15) : ''}
+        </span>` : ''}
         <span class="trx__avatar trx__avatar--${isIncome ? 'income' : 'expense'}">${emoji}</span>
         <div class="trx__body">
           <p class="trx__title">${U.escapeHtml(title)}</p>
@@ -349,12 +364,12 @@
         <span class="trx__amount trx__amount--${isIncome ? 'income' : 'expense'}">
           ${isIncome ? '+' : '−'}${U.rupiah(t.total)}
         </span>
-        ${isIncome ? `
+        ${isIncome && !o.pilih ? `
           <button type="button" class="trx__receipt" data-receipt="${t.id}"
                   title="Cetak struk" aria-label="Cetak struk ${U.escapeHtml(title)}">
             ${I.get('receipt', 16)}
           </button>` : ''}
-        <span class="trx__chev">${I.get('chevronRight', 16)}</span>
+        ${o.pilih ? '' : `<span class="trx__chev">${I.get('chevronRight', 16)}</span>`}
       </li>`;
   }
 
