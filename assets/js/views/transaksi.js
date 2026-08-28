@@ -10,6 +10,12 @@
   const PAGE = 200;   // batas baris yang digambar sekaligus, agar tetap ringan
   let shown = PAGE;
 
+  // Mode pilih untuk hapus banyak sekaligus
+  let pilihMode = false;
+  const terpilih = new Set();
+
+  function keluarModePilih() { pilihMode = false; terpilih.clear(); }
+
   const filter = {
     type: 'all',      // all | income | expense
     preset: 'today',  // today | week | month | all | custom
@@ -20,7 +26,18 @@
   };
 
   /** Dipanggil setiap saringan berubah, supaya daftar kembali ke halaman pertama */
-  function resetPaging() { shown = PAGE; }
+  function resetPaging() {
+    shown = PAGE;
+    // Pilihan ikut dikosongkan: catatan yang tadi dipilih bisa saja sudah
+    // tidak tampil setelah saringan berubah, dan menghapus sesuatu yang
+    // tidak terlihat di layar terlalu mudah disesali.
+    terpilih.clear();
+  }
+
+  // Wadah halaman dibuat baru tiap kali berpindah menu. Kalau wadahnya
+  // berganti, artinya pengguna baru masuk lagi ke halaman ini — mode pilih
+  // jangan sampai menempel dari kunjungan sebelumnya.
+  let wadahTerakhir = null;
 
   function resolveRange() {
     const t = U.today();
@@ -39,6 +56,7 @@
   }
 
   function render(root, params) {
+    if (root !== wadahTerakhir) { wadahTerakhir = root; keluarModePilih(); }
     apply(params);
     const range = resolveRange();
     const cats = S.get().expenseCategories;
@@ -74,11 +92,33 @@
           <p class="page-sub">Semua catatan uang masuk dan keluar. Ketuk salah satu untuk mengubah.</p>
         </div>
         <div class="page-head__actions">
+          ${total ? `<button type="button" class="btn btn--soft" data-act="mode-pilih">
+            ${I.get('check', 18)} ${pilihMode ? 'Selesai Pilih' : 'Pilih'}
+          </button>` : ''}
           <button type="button" class="btn btn--soft" data-act="export">${I.get('download', 18)} Ekspor Excel</button>
           <button type="button" class="btn btn--expense" data-act="expense">${I.get('plus', 18)} Pengeluaran</button>
           <button type="button" class="btn btn--income" data-act="income">${I.get('plus', 18)} Pemasukan</button>
         </div>
       </section>
+
+      ${pilihMode ? `
+        <div class="pilihbar">
+          <div class="pilihbar__info">
+            <strong>${terpilih.size} dipilih</strong>
+            <span>Ketuk baris untuk memilih atau membatalkan</span>
+          </div>
+          <div class="pilihbar__actions">
+            <button type="button" class="btn btn--soft btn--sm" data-act="pilih-semua">
+              ${I.get('check', 15)} Pilih semua ${total}
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm" data-act="pilih-batal" ${terpilih.size ? '' : 'disabled'}>
+              Kosongkan
+            </button>
+            <button type="button" class="btn btn--danger btn--sm" data-act="hapus-terpilih" ${terpilih.size ? '' : 'disabled'}>
+              ${I.get('trash', 15)} Hapus ${terpilih.size || ''}
+            </button>
+          </div>
+        </div>` : ''}
 
       <section class="filters">
         <div class="filters__row">
@@ -160,7 +200,8 @@
                   <span class="trx-group__net ${dIn - dOut >= 0 ? 'is-pos' : 'is-neg'}">${U.rupiah(dIn - dOut)}</span>
                 </div>
               </div>
-              <ul class="trx-list">${rows.map(global.Views.trxRow).join('')}</ul>
+              <ul class="trx-list">${rows.map(t =>
+                global.Views.trxRow(t, { pilih: pilihMode, terpilih: terpilih })).join('')}</ul>
             </div>`;
         }).join('') : UI.emptyState({
           emoji: '🗂️',
@@ -244,13 +285,84 @@
       if (trx) global.Forms.receiptModal(trx);
     }, 'ReceiptList');
 
+    /* --- Mode pilih --- */
+    const modeBtn = root.querySelector('[data-act=mode-pilih]');
+    if (modeBtn) modeBtn.addEventListener('click', () => {
+      if (pilihMode) keluarModePilih(); else pilihMode = true;
+      render(root);
+    });
+
+    const semuaBtn = root.querySelector('[data-act=pilih-semua]');
+    if (semuaBtn) semuaBtn.addEventListener('click', () => {
+      // Memilih SELURUH hasil saringan, bukan hanya yang sedang tampil.
+      // Jumlahnya ditulis di tombolnya, dan dikonfirmasi lagi sebelum dihapus.
+      list.forEach(t => terpilih.add(t.id));
+      render(root);
+    });
+
+    const kosongBtn = root.querySelector('[data-act=pilih-batal]');
+    if (kosongBtn) kosongBtn.addEventListener('click', () => { terpilih.clear(); render(root); });
+
+    const hapusBtn = root.querySelector('[data-act=hapus-terpilih]');
+    if (hapusBtn) hapusBtn.addEventListener('click', () => hapusTerpilih(root, list));
+
+    const toggle = id => {
+      if (terpilih.has(id)) terpilih.delete(id); else terpilih.add(id);
+      render(root);
+    };
+
     UI.on(root, 'click', '[data-trx]', (e, node) => {
       if (e.target.closest('[data-receipt]')) return;
+      if (pilihMode) { toggle(node.dataset.trx); return; }
       openTrx(node.dataset.trx, root);
     }, 'TrxList');
     UI.on(root, 'keydown', '[data-trx]', (e, node) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTrx(node.dataset.trx, root); }
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      if (pilihMode) toggle(node.dataset.trx);
+      else openTrx(node.dataset.trx, root);
     }, 'TrxListKey');
+  }
+
+  /** Konfirmasi lalu hapus semua yang dipilih, dengan tombol Batalkan */
+  async function hapusTerpilih(root, list) {
+    const ids = Array.from(terpilih);
+    if (!ids.length) return;
+
+    // Ringkasan nilainya ditampilkan supaya jelas apa yang akan hilang —
+    // menghapus 60 catatan tanpa tahu nilainya terlalu mudah disesali.
+    const dipilih = list.filter(t => terpilih.has(t.id));
+    const masuk = U.sum(dipilih.filter(t => t.type === 'income'), t => t.total);
+    const keluar = U.sum(dipilih.filter(t => t.type === 'expense'), t => t.total);
+    const rincian = [
+      masuk ? `pemasukan ${U.rupiah(masuk)}` : '',
+      keluar ? `pengeluaran ${U.rupiah(keluar)}` : ''
+    ].filter(Boolean).join(' dan ');
+
+    const ok = await UI.confirm({
+      title: `Hapus ${ids.length} catatan?`,
+      message: `Total yang ikut hilang: ${rincian || 'Rp 0'}. ` +
+        (global.Cloud && global.Cloud.currentUser()
+          ? 'Penghapusan ini juga berlaku di perangkat lain yang memakai akun yang sama.'
+          : 'Catatan ini akan hilang dari perangkat ini.') +
+        ' Masih bisa dibatalkan sesaat setelah dihapus.',
+      danger: true,
+      confirmText: `Hapus ${ids.length} catatan`
+    });
+    if (!ok) return;
+
+    const dibuang = S.removeTransactions(ids);
+    keluarModePilih();
+    render(root);
+
+    UI.toast(`${dibuang.length} catatan dihapus`, 'info', 12000, {
+      label: 'Batalkan',
+      onClick: () => {
+        S.restoreTransactions(dibuang);
+        UI.toast(`${dibuang.length} catatan dikembalikan`, 'success');
+        render(root);
+      }
+    });
   }
 
   function openTrx(id, root) {

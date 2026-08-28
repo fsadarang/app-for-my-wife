@@ -708,6 +708,45 @@
     return state.transactions.find(x => x.id === id) || null;
   }
 
+  /**
+   * Hapus beberapa transaksi sekaligus.
+   *
+   * Sengaja satu penulisan untuk semuanya, bukan sekali per catatan.
+   * Menghapus 100 catatan dengan 100 kali tulis-dan-verifikasi akan
+   * membuat aplikasi terasa menggantung di HP.
+   *
+   * Mengembalikan daftar {item, index} untuk tombol "Batalkan".
+   */
+  function removeTransactions(ids) {
+    const cari = new Set(ids || []);
+    if (!cari.size) return [];
+    const dibuang = [];
+    for (let i = state.transactions.length - 1; i >= 0; i--) {
+      const t = state.transactions[i];
+      if (!cari.has(t.id)) continue;
+      state.transactions.splice(i, 1);
+      markDeleted(t.id);
+      dibuang.push({ item: t, index: i });
+    }
+    commit();
+    return dibuang.reverse();   // urut dari indeks terkecil, agar mudah dikembalikan
+  }
+
+  /** Kembalikan sekaligus apa yang baru dihapus borongan */
+  function restoreTransactions(dibuang) {
+    if (!dibuang || !dibuang.length) return 0;
+    dibuang.forEach(x => {
+      if (!x || !x.item) return;
+      unmarkDeleted(x.item.id);
+      stamp(x.item);
+      const at = typeof x.index === 'number'
+        ? U.clamp(x.index, 0, state.transactions.length) : state.transactions.length;
+      state.transactions.splice(at, 0, x.item);
+    });
+    commit();
+    return dibuang.length;
+  }
+
   /* ---------- Pre-order ---------- */
 
   /**
@@ -1374,6 +1413,7 @@
     productGroups, addProduct, updateProduct, removeProduct, getProduct,
     addCategory, updateCategory, removeCategory, getCategory,
     addIncome, addExpense, updateTransaction, removeTransaction, restoreTransaction, getTransaction,
+    removeTransactions, restoreTransactions,
     addPreorder, updatePreorder, removePreorder, restorePreorder, getPreorder,
     completePreorder, reopenPreorder, pendingPreorders, preorderSummary, productionPlan,
     stockEntries, stockMade, hasStockRecord, addStockEntry, setStockMade,
