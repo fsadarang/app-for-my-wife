@@ -632,6 +632,144 @@
     });
   }
 
+  /* ---------- Modal: Sesuaikan Saldo Kas ---------- */
+
+  /**
+   * Saldo Kas bukan angka yang disimpan, melainkan hasil hitungan:
+   *   Modal Awal + semua pemasukan − semua pengeluaran
+   *
+   * Karena itu angkanya tidak bisa sekadar ditimpa — begitu ada penjualan
+   * berikutnya, hitungannya jalan lagi dan angka yang ditimpa tadi hilang.
+   * Yang benar adalah menutup SELISIHNYA, dan ada dua sebab yang berbeda:
+   *
+   * 1. Uangnya memang keluar/masuk tanpa sempat dicatat (paling sering).
+   *    Selisihnya dicatat sebagai transaksi, supaya laporan ikut benar.
+   * 2. Angka Modal Awal-nya yang dulu salah ketik.
+   *    Yang diperbaiki modal awalnya, dan laporan tidak perlu tersentuh.
+   */
+  function cashAdjustModal(onDone) {
+    const saldo = S.cashBalance();
+    const st = S.get();
+    const masuk = U.sum(st.transactions.filter(t => t.type === 'income'), t => t.total);
+    const keluar = U.sum(st.transactions.filter(t => t.type === 'expense'), t => t.total);
+    const modalAwal = Number(st.profile.startingCash) || 0;
+
+    const body = `
+      <form class="form" id="cashForm" novalidate>
+        <div class="kas-now">
+          <span class="kas-now__label">${I.get('wallet', 15)} Saldo kas tercatat sekarang</span>
+          <strong class="kas-now__value">${U.rupiah(saldo)}</strong>
+          <span class="kas-now__rumus">
+            Modal awal ${U.rupiah(modalAwal)} + masuk ${U.rupiah(masuk)} − keluar ${U.rupiah(keluar)}
+          </span>
+        </div>
+
+        <label class="field">
+          <span class="field__label">Uang yang benar-benar ada di kas sekarang</span>
+          <div class="amount-input">
+            <span class="amount-input__prefix">Rp</span>
+            <input type="text" id="kasReal" inputmode="numeric" placeholder="0" data-autofocus
+                   value="${saldo ? U.number(saldo) : ''}">
+          </div>
+        </label>
+
+        <div class="kas-diff" data-diff></div>
+
+        <div class="field">
+          <span class="field__label">Selisihnya mau dicatat sebagai apa?</span>
+          <div class="kas-cara" data-cara>
+            <button type="button" class="kas-opt is-active" data-cara-val="transaksi">
+              <strong>Uang memang keluar / masuk</strong>
+              <span>Dicatat sebagai transaksi, dan ikut terlihat di Laporan. Pilih ini kalau uangnya
+              terpakai atau diterima tapi lupa dicatat.</span>
+            </button>
+            <button type="button" class="kas-opt" data-cara-val="modal">
+              <strong>Modal awal saya yang salah</strong>
+              <span>Yang diperbaiki angka Modal Awal-nya saja. Laporan penjualan dan pengeluaran
+              tidak berubah sama sekali.</span>
+            </button>
+          </div>
+        </div>
+      </form>`;
+
+    global.UI.modal({
+      title: 'Sesuaikan Saldo Kas',
+      subtitle: 'Cocokkan dengan uang yang ada di tangan',
+      icon: 'wallet',
+      size: 'md',
+      body: body,
+      footer: `<span class="spacer"></span>
+        <button type="button" class="btn btn--ghost" data-act="cancel">Batal</button>
+        <button type="submit" form="cashForm" class="btn btn--primary" data-act="simpan">
+          ${I.get('save', 18)} Sesuaikan
+        </button>`,
+      onMount: handle => {
+        const root = handle.root;
+        const form = root.querySelector('#cashForm');
+        const input = root.querySelector('#kasReal');
+        const diff = root.querySelector('[data-diff]');
+        const simpan = root.querySelector('[data-act=simpan]');
+        U.attachThousand(input);
+
+        const cara = bindChips(root, '[data-cara] .kas-opt', 'caraVal');
+
+        const selisih = () => U.parseNumber(input.value) - saldo;
+
+        function gambarSelisih() {
+          const d = selisih();
+          if (!d) {
+            diff.className = 'kas-diff is-sama';
+            diff.innerHTML = `${I.get('check', 16)} Sudah cocok — tidak ada yang perlu disesuaikan.`;
+            simpan.disabled = true;
+            return;
+          }
+          const lebih = d > 0;
+          diff.className = 'kas-diff ' + (lebih ? 'is-lebih' : 'is-kurang');
+          diff.innerHTML = `
+            ${I.get(lebih ? 'trendUp' : 'trendDown', 16)}
+            <span>Uang di kas <b>${lebih ? 'lebih' : 'kurang'} ${U.rupiah(Math.abs(d))}</b>
+            dari yang tercatat.</span>`;
+          simpan.disabled = false;
+        }
+
+        input.addEventListener('input', gambarSelisih);
+        gambarSelisih();
+
+        root.querySelector('[data-act=cancel]').addEventListener('click', () => handle.close());
+
+        form.addEventListener('submit', e => {
+          e.preventDefault();
+          const d = selisih();
+          if (!d) return;
+          const target = U.parseNumber(input.value);
+
+          if (cara.get() === 'modal') {
+            // Balik rumusnya: modalAwal = saldo yang diinginkan − masuk + keluar
+            S.updateProfile({ startingCash: Math.max(0, modalAwal + d) });
+            handle.close();
+            global.UI.toast(`Modal awal diperbaiki. Saldo kas sekarang ${U.rupiah(target)}.`, 'success', 6000);
+            if (onDone) onDone();
+            return;
+          }
+
+          const catatan = 'Penyesuaian saldo kas';
+          if (d > 0) {
+            S.addIncome({ total: d, customerName: '', note: catatan, method: 'tunai' });
+          } else {
+            const kategori = S.get().expenseCategories.find(c => c.id === 'cat_lain') ||
+              S.get().expenseCategories[0];
+            S.addExpense({ total: Math.abs(d), categoryId: kategori && kategori.id, note: catatan, method: 'tunai' });
+          }
+          handle.close();
+          global.UI.toast(
+            `Selisih ${U.rupiah(Math.abs(d))} dicatat sebagai ${d > 0 ? 'pemasukan' : 'pengeluaran'}. ` +
+            `Saldo kas sekarang ${U.rupiah(target)}.`, 'success', 7000);
+          if (onDone) onDone();
+        });
+      }
+    });
+  }
+
   /* ---------- Modal: Stok Harian ---------- */
 
   /**
@@ -1262,6 +1400,7 @@
   global.Forms = {
     expenseModal, quickIncomeModal, incomeDetailModal,
     productModal, categoryModal, receiptModal, preorderModal, completePreorderModal, stockModal,
+    cashAdjustModal,
     bindAmount, bindChips, amountField, dateTimeFields, methodChips, noteField
   };
 })(window);

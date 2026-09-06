@@ -1813,6 +1813,54 @@ kbd {
 .btn.is-disabled:hover, .btn:disabled:hover { transform: none; }
 
 /* =========================================================
+   Sesuaikan Saldo Kas
+   ========================================================= */
+
+/* Kotak saldo kini bisa diketuk — gaya tombol bawaan peramban dilepas */
+.cash-box {
+  width: 100%; text-align: left; font: inherit; color: inherit;
+  cursor: pointer; display: block;
+  transition: border-color .15s, transform .12s var(--ease);
+}
+.cash-box:hover { border-color: var(--cash); transform: translateY(-1px); }
+.cash-box__label { justify-content: space-between; }
+.cash-box__edit { color: var(--cash); opacity: .7; display: inline-grid; place-items: center; }
+.topbar__cash { font: inherit; cursor: pointer; transition: border-color .15s; }
+.topbar__cash:hover { border-color: var(--cash); }
+
+.kas-now {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 13px 15px; border-radius: var(--r-md);
+  background: var(--cash-soft); border: 1px solid color-mix(in srgb, var(--cash) 28%, transparent);
+}
+.kas-now__label { display: flex; align-items: center; gap: 6px; font-size: .77rem; font-weight: 650; color: var(--cash); }
+.kas-now__value { font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; }
+.kas-now__rumus { font-size: .72rem; color: var(--text-3); line-height: 1.4; }
+
+.kas-diff {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 11px 13px; border-radius: var(--r); font-size: .85rem; line-height: 1.45;
+}
+.kas-diff svg { flex: none; margin-top: 2px; }
+.kas-diff.is-sama { background: var(--surface-3); color: var(--text-2); }
+.kas-diff.is-lebih { background: var(--income-soft); color: var(--income); }
+.kas-diff.is-kurang { background: var(--expense-soft); color: var(--expense); }
+.kas-diff b { font-weight: 800; }
+
+.kas-cara { display: flex; flex-direction: column; gap: 8px; }
+.kas-opt {
+  display: flex; flex-direction: column; gap: 3px; text-align: left;
+  padding: 12px 14px; border-radius: var(--r-md); cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border);
+  transition: border-color .15s, background .15s;
+}
+.kas-opt strong { font-size: .89rem; }
+.kas-opt span { font-size: .78rem; color: var(--text-2); line-height: 1.45; }
+.kas-opt:hover { border-color: var(--border-strong); }
+.kas-opt.is-active { border-color: var(--primary); background: var(--primary-soft); }
+.kas-opt.is-active strong { color: var(--primary); }
+
+/* =========================================================
    Pilih banyak transaksi untuk dihapus sekaligus
    ========================================================= */
 

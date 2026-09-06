@@ -54,10 +54,13 @@
         </nav>
 
         <div class="sidebar__foot">
-          <div class="cash-box">
-            <span class="cash-box__label">${I.get('wallet', 16)} Saldo Kas</span>
+          <button type="button" class="cash-box" data-act="cash-adjust" title="Sesuaikan saldo kas">
+            <span class="cash-box__label">
+              ${I.get('wallet', 16)} Saldo Kas
+              <span class="cash-box__edit">${I.get('edit', 13)}</span>
+            </span>
             <strong class="cash-box__value" data-cash>${U.rupiah(S.cashBalance())}</strong>
-          </div>
+          </button>
           <button type="button" class="theme-toggle" data-act="theme" aria-label="Ganti tema">
             <span data-theme-icon>${I.get('moon', 18)}</span>
             <span data-theme-label>Mode Gelap</span>
@@ -76,7 +79,8 @@
             </div>
           </div>
           <div class="topbar__actions">
-            <span class="topbar__cash" data-cash-top>${I.get('wallet', 16)} ${U.rupiah(S.cashBalance())}</span>
+            <button type="button" class="topbar__cash" data-cash-top data-act="cash-adjust"
+                    title="Sesuaikan saldo kas">${I.get('wallet', 16)} ${U.rupiah(S.cashBalance())}</button>
             <button type="button" class="icon-btn" data-act="theme" aria-label="Ganti tema">
               <span data-theme-icon>${I.get('moon', 20)}</span>
             </button>
@@ -126,6 +130,11 @@
     const app = document.getElementById('app');
 
     app.querySelectorAll('[data-act=theme]').forEach(btn => btn.addEventListener('click', toggleTheme));
+
+    app.querySelectorAll('[data-act=cash-adjust]').forEach(btn => btn.addEventListener('click', () => {
+      closeNav();
+      global.Forms.cashAdjustModal(() => { refreshShell(); refreshCurrentView(); });
+    }));
 
     const scrim = app.querySelector('.nav-scrim');
     app.querySelector('[data-act=open-nav]').addEventListener('click', () => {
