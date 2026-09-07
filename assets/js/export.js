@@ -345,7 +345,7 @@ ${list.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxm
 
   function expenseRows(list) {
     const rows = [['Tanggal', 'Jam', 'Kategori', 'Jumlah', 'Metode Bayar', 'Catatan']];
-    list.filter(t => t.type === 'expense').forEach(t => {
+    list.filter(t => t.type === 'expense' && !t.adjustment).forEach(t => {
       rows.push([
         t.date, t.time || '', S().getCategory(t.categoryId).name,
         t.total, methodName(t.method), t.note || ''
@@ -357,7 +357,8 @@ ${list.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxm
   /** Sheet "Rekap Harian": berapa pelanggan tiap hari dan berapa uangnya */
   function dailyRows(list) {
     const rows = [['Tanggal', 'Jumlah Pelanggan', 'Porsi Terjual', 'Pemasukan', 'Pengeluaran', 'Selisih']];
-    const byDate = U.groupBy(list, t => t.date);
+    // Penyesuaian saldo tidak ikut, supaya rekap hariannya tidak melenceng
+    const byDate = U.groupBy(list.filter(t => !t.adjustment), t => t.date);
     Array.from(byDate.keys()).sort().forEach(date => {
       const day = byDate.get(date);
       const incomes = day.filter(t => t.type === 'income');
@@ -408,11 +409,16 @@ ${list.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxm
   }
 
   function summaryRows(list, title, rangeLabel) {
-    const incomes = list.filter(t => t.type === 'income');
-    const expenses = list.filter(t => t.type === 'expense');
+    // Penyesuaian saldo bukan penjualan dan bukan pengeluaran, jadi tidak
+    // ikut dijumlahkan di ringkasan. Nilainya tetap dilaporkan terpisah
+    // agar selisih dengan saldo kas bisa ditelusuri.
+    const penyesuaian = list.filter(t => t.adjustment);
+    const nyata = list.filter(t => !t.adjustment);
+    const incomes = nyata.filter(t => t.type === 'income');
+    const expenses = nyata.filter(t => t.type === 'expense');
     const income = U.sum(incomes, t => t.total);
     const expense = U.sum(expenses, t => t.total);
-    return [
+    const baris = [
       ['LAPORAN USAHA', title || ''],
       ['Periode', rangeLabel || ''],
       ['Dibuat', U.formatDateFull(U.today())],
@@ -426,6 +432,13 @@ ${list.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxm
       ['Rata-rata per Pelanggan', incomes.length ? Math.round(income / incomes.length) : 0],
       ['Jumlah Catatan Pengeluaran', expenses.length]
     ];
+    if (penyesuaian.length) {
+      baris.push([], ['PENYESUAIAN SALDO', 'tidak dihitung untung rugi']);
+      baris.push(['Jumlah Catatan Penyesuaian', penyesuaian.length]);
+      baris.push(['Nilai Bersih Penyesuaian',
+        U.sum(penyesuaian, t => (t.type === 'income' ? t.total : -t.total))]);
+    }
+    return baris;
   }
 
   /** Peringkat menu, supaya terlihat item mana yang paling laku */
