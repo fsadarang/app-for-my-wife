@@ -6,7 +6,10 @@
 
   const U = global.Utils;
   const KEY = 'dapurku.data.v1';
-  const SCHEMA = 5;   // 5: penanda waktu perubahan + daftar penghapusan (untuk sinkronisasi)
+  const SCHEMA = 6;   // 6: penyesuaian saldo tidak lagi dihitung untung-rugi
+
+  // Catatan penyesuaian yang dibuat versi sebelumnya dikenali dari catatannya
+  const CATATAN_PENYESUAIAN = ['Penyesuaian saldo kas', 'Penyesuaian saldo tunai'];
 
   // Kelompok catatan yang ikut disinkronkan antar perangkat
   const SYNCED_KEYS = ['transactions', 'products', 'preorders', 'stocks', 'expenseCategories'];
@@ -149,6 +152,16 @@
       if (t.change == null) t.change = 0;
       if (Array.isArray(t.items)) {
         t.items.forEach(it => { if (it.note == null) it.note = ''; });
+      }
+    });
+
+    // Skema 5 -> 6: penyesuaian saldo dulu tercatat sebagai pengeluaran
+    // biasa, sehingga sekali penyesuaian besar bisa membuat satu hari
+    // terlihat rugi jutaan. Catatan lama ditandai di sini supaya laporannya
+    // langsung benar, tanpa pemiliknya perlu menghapus apa pun.
+    s.transactions.forEach(t => {
+      if (t.adjustment === undefined) {
+        t.adjustment = CATATAN_PENYESUAIAN.indexOf((t.note || '').trim()) >= 0;
       }
     });
 
@@ -623,6 +636,8 @@
       cashGiven: cashGiven,
       change: change,
       note: (data.note || '').trim(),
+      // Penyesuaian saldo: ikut menghitung kas, tapi bukan penjualan.
+      adjustment: !!data.adjustment,
       createdAt: new Date().toISOString()
     };
     stamp(t);
@@ -641,6 +656,8 @@
       total: Math.max(0, Number(data.total) || 0),
       method: data.method || 'tunai',
       note: (data.note || '').trim(),
+      // Penyesuaian saldo: ikut menghitung kas, tapi bukan pengeluaran.
+      adjustment: !!data.adjustment,
       createdAt: new Date().toISOString()
     };
     stamp(t);
@@ -1110,11 +1127,32 @@
     });
   }
 
+  /**
+   * Penyesuaian saldo BUKAN penjualan dan BUKAN pengeluaran.
+   *
+   * Catatan ini hanya mengoreksi posisi kas supaya cocok dengan uang yang
+   * benar-benar ada. Kalau ikut dihitung sebagai pengeluaran, sekali
+   * penyesuaian besar bisa membuat hari itu terlihat rugi jutaan padahal
+   * tidak ada uang belanja sebesar itu.
+   *
+   * Jadi: ikut dihitung di SALDO KAS (memang itu tujuannya), tapi tidak
+   * pernah ikut di laporan untung-rugi, grafik, maupun peringkat kategori.
+   */
+  function isAdjustment(t) {
+    return !!(t && t.adjustment);
+  }
+
+  /** Buang catatan penyesuaian dari sebuah daftar */
+  function tanpaPenyesuaian(list) {
+    return (list || []).filter(t => !isAdjustment(t));
+  }
+
   /** Ringkasan periode: pendapatan, pengeluaran, laba, hpp, transaksi */
   function summary(from, to) {
     const list = inRange(from, to);
-    const incomes = list.filter(t => t.type === 'income');
-    const expenses = list.filter(t => t.type === 'expense');
+    const nyata = tanpaPenyesuaian(list);
+    const incomes = nyata.filter(t => t.type === 'income');
+    const expenses = nyata.filter(t => t.type === 'expense');
     const income = U.sum(incomes, t => t.total);
     const expense = U.sum(expenses, t => t.total);
     const hpp = U.sum(incomes, t => t.hpp || 0);
@@ -1134,6 +1172,11 @@
       expenseCount: expenses.length,
       itemsSold,
       avgOrder: incomes.length ? income / incomes.length : 0,
+      // Nilai penyesuaian dilaporkan terpisah, supaya kalau ada selisih
+      // antara laporan dan saldo kas, sebabnya bisa langsung terlihat.
+      adjustment: U.sum(list.filter(isAdjustment),
+        t => (t.type === 'income' ? t.total : -t.total)),
+      adjustmentCount: list.filter(isAdjustment).length,
       transactions: list
     };
   }
@@ -1143,7 +1186,7 @@
    * yang mereka beli. Dipakai halaman Pelanggan dan rekap harian.
    */
   function customersByDay(from, to) {
-    const byDate = U.groupBy(inRange(from, to).filter(t => t.type === 'income'), t => t.date);
+    const byDate = U.groupBy(tanpaPenyesuaian(inRange(from, to)).filter(t => t.type === 'income'), t => t.date);
     return Array.from(byDate.keys()).sort().reverse().map(date => {
       const orders = sortedDesc(byDate.get(date));
       return {
@@ -1247,7 +1290,7 @@
 
   /** Deret harian untuk grafik */
   function dailySeries(from, to) {
-    const byDate = U.groupBy(inRange(from, to), t => t.date);
+    const byDate = U.groupBy(tanpaPenyesuaian(inRange(from, to)), t => t.date);
     return U.dateRangeList(from, to).map(date => {
       const list = byDate.get(date) || [];
       const income = U.sum(list.filter(t => t.type === 'income'), t => t.total);
@@ -1259,7 +1302,7 @@
   /** Peringkat menu terlaris dalam periode */
   function topProducts(from, to, limit) {
     const map = new Map();
-    inRange(from, to).filter(t => t.type === 'income').forEach(t => {
+    tanpaPenyesuaian(inRange(from, to)).filter(t => t.type === 'income').forEach(t => {
       (t.items || []).forEach(it => {
         const key = it.productId || ('nm:' + it.name);
         if (!map.has(key)) {
@@ -1279,7 +1322,7 @@
   /** Rincian pengeluaran per kategori */
   function expenseByCategory(from, to) {
     const map = new Map();
-    inRange(from, to).filter(t => t.type === 'expense').forEach(t => {
+    tanpaPenyesuaian(inRange(from, to)).filter(t => t.type === 'expense').forEach(t => {
       const c = getCategory(t.categoryId);
       if (!map.has(c.id)) map.set(c.id, { id: c.id, name: c.name, emoji: c.emoji, color: c.color, total: 0, count: 0 });
       const row = map.get(c.id);
@@ -1294,7 +1337,7 @@
   /** Rincian pemasukan per metode pembayaran */
   function incomeByMethod(from, to) {
     const map = new Map();
-    inRange(from, to).filter(t => t.type === 'income').forEach(t => {
+    tanpaPenyesuaian(inRange(from, to)).filter(t => t.type === 'income').forEach(t => {
       const m = PAYMENT_METHODS.find(x => x.id === t.method) || { id: t.method, name: t.method, emoji: '💰' };
       if (!map.has(m.id)) map.set(m.id, { id: m.id, name: m.name, emoji: m.emoji, total: 0, count: 0 });
       const row = map.get(m.id);
@@ -1502,6 +1545,7 @@
     stamp, markDeleted, unmarkDeleted, deletedIds, dropDeletedLocally,
     SYNCED_KEYS, markDirty, markAllDirty, clearDirty, dirtyIds, applyRemote, hasUserContent,
     inRange, sortedDesc, summary, cashBalance, balanceByMethod, balanceOfMethod, balanceGrouped,
+    isAdjustment, tanpaPenyesuaian,
     dailySeries, topProducts,
     expenseByCategory, incomeByMethod, firstDate, customersByDay,
     seedProducts, seedDemoTransactions, hasDemoData, clearDemoData,

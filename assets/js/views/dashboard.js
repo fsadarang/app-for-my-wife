@@ -401,7 +401,8 @@
         </span>` : ''}
         <span class="trx__avatar trx__avatar--${isIncome ? 'income' : 'expense'}">${emoji}</span>
         <div class="trx__body">
-          <p class="trx__title">${U.escapeHtml(title)}</p>
+          <p class="trx__title">${U.escapeHtml(title)}${t.adjustment
+            ? ' <span class="badge badge--muted">penyesuaian</span>' : ''}</p>
           ${isIncome && t.customerName && itemText
             ? `<p class="trx__items">${U.escapeHtml(itemText)}</p>` : ''}
           <p class="trx__meta">

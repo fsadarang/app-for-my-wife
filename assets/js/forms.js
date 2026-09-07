@@ -705,9 +705,9 @@
           <span class="field__label">Selisihnya mau dicatat sebagai apa?</span>
           <div class="kas-cara" data-cara>
             <button type="button" class="kas-opt is-active" data-cara-val="transaksi">
-              <strong>Uang tunai memang keluar / masuk</strong>
-              <span>Dicatat sebagai transaksi tunai, dan ikut terlihat di Laporan. Pilih ini kalau
-              uangnya terpakai atau diterima tapi lupa dicatat.</span>
+              <strong>Catat sebagai penyesuaian</strong>
+              <span>Saldo kas jadi cocok, tapi selisihnya <b>tidak dihitung</b> sebagai penjualan
+              atau pengeluaran di Laporan — jadi untung-rugimu tidak ikut berubah.</span>
             </button>
             <button type="button" class="kas-opt" data-cara-val="modal">
               <strong>Modal awal saya yang salah</strong>
@@ -779,18 +779,25 @@
             return;
           }
 
+          // Ditandai sebagai penyesuaian: ikut menghitung saldo kas, tapi
+          // TIDAK ikut di laporan untung-rugi. Tanpa penanda ini, sekali
+          // penyesuaian besar bisa membuat satu hari terlihat rugi jutaan.
           const catatan = 'Penyesuaian saldo tunai';
           if (d > 0) {
-            S.addIncome({ total: d, customerName: '', note: catatan, method: 'tunai' });
+            S.addIncome({ total: d, customerName: '', note: catatan, method: 'tunai', adjustment: true });
           } else {
             const kategori = S.get().expenseCategories.find(c => c.id === 'cat_lain') ||
               S.get().expenseCategories[0];
-            S.addExpense({ total: Math.abs(d), categoryId: kategori && kategori.id, note: catatan, method: 'tunai' });
+            S.addExpense({
+              total: Math.abs(d), categoryId: kategori && kategori.id,
+              note: catatan, method: 'tunai', adjustment: true
+            });
           }
           handle.close();
           global.UI.toast(
-            `Selisih ${U.rupiah(Math.abs(d))} dicatat sebagai ${d > 0 ? 'pemasukan' : 'pengeluaran'} tunai. ` +
-            `Uang tunai sekarang tercatat ${U.rupiah(target)}.`, 'success', 7000);
+            `Uang tunai sekarang tercatat ${U.rupiah(target)}. ` +
+            `Selisih ${U.rupiah(Math.abs(d))} tidak dihitung sebagai ` +
+            `${d > 0 ? 'penjualan' : 'pengeluaran'} di Laporan.`, 'success', 8000);
           if (onDone) onDone();
         });
       }
