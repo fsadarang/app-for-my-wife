@@ -648,29 +648,48 @@
    *    Yang diperbaiki modal awalnya, dan laporan tidak perlu tersentuh.
    */
   function cashAdjustModal(onDone) {
-    const saldo = S.cashBalance();
     const st = S.get();
-    const masuk = U.sum(st.transactions.filter(t => t.type === 'income'), t => t.total);
-    const keluar = U.sum(st.transactions.filter(t => t.type === 'expense'), t => t.total);
+    const total = S.cashBalance();
+    const perCara = S.balanceByMethod();
+    const tunai = perCara.find(r => r.id === 'tunai') || { saldo: 0, modalAwal: 0, masuk: 0, keluar: 0 };
     const modalAwal = Number(st.profile.startingCash) || 0;
 
+    // Yang bisa dihitung dengan tangan hanya uang tunai. QRIS, transfer,
+    // dan ojol ada di rekening atau masih ditahan, jadi penyesuaian di
+    // sini sengaja hanya menyasar uang tunai.
     const body = `
       <form class="form" id="cashForm" novalidate>
         <div class="kas-now">
-          <span class="kas-now__label">${I.get('wallet', 15)} Saldo kas tercatat sekarang</span>
-          <strong class="kas-now__value">${U.rupiah(saldo)}</strong>
-          <span class="kas-now__rumus">
-            Modal awal ${U.rupiah(modalAwal)} + masuk ${U.rupiah(masuk)} − keluar ${U.rupiah(keluar)}
-          </span>
+          <span class="kas-now__label">${I.get('wallet', 15)} Total seluruh saldo</span>
+          <strong class="kas-now__value">${U.rupiah(total)}</strong>
+        </div>
+
+        <div class="kas-split">
+          ${perCara.map(r => `
+            <div class="kas-split__row${r.id === 'tunai' ? ' is-tunai' : ''}">
+              <span class="kas-split__emoji">${r.emoji}</span>
+              <span class="kas-split__name">
+                ${U.escapeHtml(r.name)}
+                ${r.id === 'tunai' ? '<small>ada di laci</small>' : '<small>bukan uang di laci</small>'}
+              </span>
+              <strong class="kas-split__val ${r.saldo < 0 ? 'is-neg' : ''}">${U.rupiah(r.saldo)}</strong>
+            </div>`).join('')}
         </div>
 
         <label class="field">
-          <span class="field__label">Uang yang benar-benar ada di kas sekarang</span>
+          <span class="field__label">
+            ${I.get('banknote', 14)} Uang TUNAI yang benar-benar ada di laci sekarang
+          </span>
           <div class="amount-input">
             <span class="amount-input__prefix">Rp</span>
             <input type="text" id="kasReal" inputmode="numeric" placeholder="0" data-autofocus
-                   value="${saldo ? U.number(saldo) : ''}">
+                   value="${tunai.saldo ? U.number(tunai.saldo) : ''}">
           </div>
+          <span class="field__note">
+            Tercatat ${U.rupiah(tunai.saldo)} — dari modal awal ${U.rupiah(tunai.modalAwal)}
+            + masuk ${U.rupiah(tunai.masuk)} − keluar ${U.rupiah(tunai.keluar)}.
+            Saldo QRIS, transfer, dan ojol tidak ikut disesuaikan di sini.
+          </span>
         </label>
 
         <div class="kas-diff" data-diff></div>
@@ -679,9 +698,9 @@
           <span class="field__label">Selisihnya mau dicatat sebagai apa?</span>
           <div class="kas-cara" data-cara>
             <button type="button" class="kas-opt is-active" data-cara-val="transaksi">
-              <strong>Uang memang keluar / masuk</strong>
-              <span>Dicatat sebagai transaksi, dan ikut terlihat di Laporan. Pilih ini kalau uangnya
-              terpakai atau diterima tapi lupa dicatat.</span>
+              <strong>Uang tunai memang keluar / masuk</strong>
+              <span>Dicatat sebagai transaksi tunai, dan ikut terlihat di Laporan. Pilih ini kalau
+              uangnya terpakai atau diterima tapi lupa dicatat.</span>
             </button>
             <button type="button" class="kas-opt" data-cara-val="modal">
               <strong>Modal awal saya yang salah</strong>
@@ -713,13 +732,13 @@
 
         const cara = bindChips(root, '[data-cara] .kas-opt', 'caraVal');
 
-        const selisih = () => U.parseNumber(input.value) - saldo;
+        const selisih = () => U.parseNumber(input.value) - tunai.saldo;
 
         function gambarSelisih() {
           const d = selisih();
           if (!d) {
             diff.className = 'kas-diff is-sama';
-            diff.innerHTML = `${I.get('check', 16)} Sudah cocok — tidak ada yang perlu disesuaikan.`;
+            diff.innerHTML = `${I.get('check', 16)} Uang tunai sudah cocok — tidak ada yang perlu disesuaikan.`;
             simpan.disabled = true;
             return;
           }
@@ -727,8 +746,8 @@
           diff.className = 'kas-diff ' + (lebih ? 'is-lebih' : 'is-kurang');
           diff.innerHTML = `
             ${I.get(lebih ? 'trendUp' : 'trendDown', 16)}
-            <span>Uang di kas <b>${lebih ? 'lebih' : 'kurang'} ${U.rupiah(Math.abs(d))}</b>
-            dari yang tercatat.</span>`;
+            <span>Uang tunai di laci <b>${lebih ? 'lebih' : 'kurang'} ${U.rupiah(Math.abs(d))}</b>
+            dari yang tercatat. Total seluruh saldo akan jadi ${U.rupiah(total + d)}.</span>`;
           simpan.disabled = false;
         }
 
@@ -744,15 +763,16 @@
           const target = U.parseNumber(input.value);
 
           if (cara.get() === 'modal') {
-            // Balik rumusnya: modalAwal = saldo yang diinginkan − masuk + keluar
+            // Modal awal memang uang tunai, jadi menggesernya sebesar
+            // selisih akan membuat saldo tunai pas.
             S.updateProfile({ startingCash: Math.max(0, modalAwal + d) });
             handle.close();
-            global.UI.toast(`Modal awal diperbaiki. Saldo kas sekarang ${U.rupiah(target)}.`, 'success', 6000);
+            global.UI.toast(`Modal awal diperbaiki. Uang tunai sekarang tercatat ${U.rupiah(target)}.`, 'success', 6000);
             if (onDone) onDone();
             return;
           }
 
-          const catatan = 'Penyesuaian saldo kas';
+          const catatan = 'Penyesuaian saldo tunai';
           if (d > 0) {
             S.addIncome({ total: d, customerName: '', note: catatan, method: 'tunai' });
           } else {
@@ -762,8 +782,8 @@
           }
           handle.close();
           global.UI.toast(
-            `Selisih ${U.rupiah(Math.abs(d))} dicatat sebagai ${d > 0 ? 'pemasukan' : 'pengeluaran'}. ` +
-            `Saldo kas sekarang ${U.rupiah(target)}.`, 'success', 7000);
+            `Selisih ${U.rupiah(Math.abs(d))} dicatat sebagai ${d > 0 ? 'pemasukan' : 'pengeluaran'} tunai. ` +
+            `Uang tunai sekarang tercatat ${U.rupiah(target)}.`, 'success', 7000);
           if (onDone) onDone();
         });
       }

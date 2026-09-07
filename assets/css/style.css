@@ -1837,6 +1837,40 @@ kbd {
 .kas-now__value { font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; }
 .kas-now__rumus { font-size: .72rem; color: var(--text-3); line-height: 1.4; }
 
+/* Rincian saldo per cara bayar — di jendela penyesuaian */
+.kas-split {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden;
+}
+.kas-split__row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; background: var(--surface);
+}
+.kas-split__row + .kas-split__row { border-top: 1px solid var(--border); }
+.kas-split__row.is-tunai { background: var(--income-soft); }
+.kas-split__emoji { font-size: 1.1rem; flex: none; }
+.kas-split__name { flex: 1; min-width: 0; font-size: .86rem; font-weight: 650; }
+.kas-split__name small { display: block; font-size: .7rem; font-weight: 500; color: var(--text-3); }
+.kas-split__row.is-tunai .kas-split__name small { color: var(--income); }
+.kas-split__val { font-size: .92rem; font-weight: 800; white-space: nowrap; }
+.kas-split__val.is-neg { color: var(--expense); }
+
+/* Rincian saldo per cara bayar — kartu di Beranda */
+.card--dompet { border-color: color-mix(in srgb, var(--cash) 28%, var(--border)); }
+.dompet { display: flex; flex-direction: column; gap: 2px; }
+.dompet__row {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 11px; border-radius: var(--r);
+}
+.dompet__row.is-tunai { background: var(--income-soft); }
+.dompet__emoji { font-size: 1.25rem; flex: none; }
+.dompet__name { flex: 1; min-width: 0; font-size: .88rem; font-weight: 650; }
+.dompet__name small { display: block; font-size: .71rem; font-weight: 500; color: var(--text-3); }
+.dompet__row.is-tunai .dompet__name small { color: var(--income); }
+.dompet__val { font-size: .98rem; font-weight: 800; white-space: nowrap; }
+.dompet__val.is-neg { color: var(--expense); }
+.card--dompet .link { background: none; border: none; cursor: pointer; }
+
 .kas-diff {
   display: flex; align-items: flex-start; gap: 8px;
   padding: 11px 13px; border-radius: var(--r); font-size: .85rem; line-height: 1.45;

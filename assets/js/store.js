@@ -1164,6 +1164,55 @@
     return (Number(state.profile.startingCash) || 0) + income - expense;
   }
 
+  /**
+   * Saldo dipisah menurut cara pembayaran.
+   *
+   * Uang QRIS, transfer, dan ojol TIDAK ada di laci — uangnya di rekening,
+   * atau masih ditahan aplikasi ojol dan baru cair belakangan. Menjumlahkan
+   * semuanya jadi satu angka membuat "Saldo Kas" tidak akan pernah cocok
+   * saat uang di laci benar-benar dihitung.
+   *
+   * Modal awal dianggap uang tunai, karena memang uang yang sudah ada di
+   * laci sebelum mulai mencatat.
+   *
+   * Jumlah seluruh saldo di sini selalu sama dengan cashBalance().
+   */
+  function balanceByMethod() {
+    const peta = new Map();
+    const ambil = id => {
+      const m = PAYMENT_METHODS.find(x => x.id === id) || PAYMENT_METHODS[0];
+      if (!peta.has(m.id)) {
+        peta.set(m.id, {
+          id: m.id, name: m.name, emoji: m.emoji, icon: m.icon,
+          modalAwal: 0, masuk: 0, keluar: 0, saldo: 0, jumlahTransaksi: 0
+        });
+      }
+      return peta.get(m.id);
+    };
+    // Semua cara bayar selalu ditampilkan, dengan urutan tetap.
+    PAYMENT_METHODS.forEach(m => ambil(m.id));
+
+    ambil('tunai').modalAwal = Number(state.profile.startingCash) || 0;
+
+    state.transactions.forEach(t => {
+      const row = ambil(t.method);
+      row.jumlahTransaksi += 1;
+      if (t.type === 'income') row.masuk += t.total;
+      else row.keluar += t.total;
+    });
+
+    return Array.from(peta.values()).map(r => {
+      r.saldo = r.modalAwal + r.masuk - r.keluar;
+      return r;
+    });
+  }
+
+  /** Saldo untuk satu cara bayar saja */
+  function balanceOfMethod(id) {
+    const row = balanceByMethod().find(r => r.id === (id || 'tunai'));
+    return row ? row.saldo : 0;
+  }
+
   /** Deret harian untuk grafik */
   function dailySeries(from, to) {
     const byDate = U.groupBy(inRange(from, to), t => t.date);
@@ -1420,7 +1469,8 @@
     removeStockEntry, restoreStockEntry, stockOverview, stockSummary,
     stamp, markDeleted, unmarkDeleted, deletedIds, dropDeletedLocally,
     SYNCED_KEYS, markDirty, markAllDirty, clearDirty, dirtyIds, applyRemote, hasUserContent,
-    inRange, sortedDesc, summary, cashBalance, dailySeries, topProducts,
+    inRange, sortedDesc, summary, cashBalance, balanceByMethod, balanceOfMethod,
+    dailySeries, topProducts,
     expenseByCategory, incomeByMethod, firstDate, customersByDay,
     seedProducts, seedDemoTransactions, hasDemoData, clearDemoData,
     resetAll, clearTransactions, exportJSON, importJSON
