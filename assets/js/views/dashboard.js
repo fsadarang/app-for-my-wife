@@ -138,6 +138,38 @@
       })()}
 
       ${(() => {
+        // Uang QRIS, transfer, dan ojol tidak ada di laci. Dipisah supaya
+        // jelas mana yang benar-benar bisa dipegang hari ini.
+        const perCara = S.balanceByMethod();
+        const adaIsi = perCara.some(r => r.saldo !== 0 || r.jumlahTransaksi);
+        if (!adaIsi) return '';
+        const tunai = perCara.find(r => r.id === 'tunai') || { saldo: 0 };
+        const luar = balance - tunai.saldo;
+        return `
+        <section class="card card--dompet">
+          <div class="card__head">
+            <div>
+              <h2 class="card__title">${I.get('wallet', 18)} Uang Kamu Ada di Mana</h2>
+              <p class="card__sub">Total ${U.rupiah(balance)} • di laci ${U.rupiah(tunai.saldo)}${
+                luar ? ` • di luar laci ${U.rupiah(luar)}` : ''}</p>
+            </div>
+            <button type="button" class="link" data-act="atur-kas">Sesuaikan ${I.get('chevronRight', 14)}</button>
+          </div>
+          <ul class="dompet">
+            ${perCara.map(r => `
+              <li class="dompet__row${r.id === 'tunai' ? ' is-tunai' : ''}">
+                <span class="dompet__emoji">${r.emoji}</span>
+                <span class="dompet__name">
+                  ${U.escapeHtml(r.name)}
+                  <small>${r.id === 'tunai' ? 'uang di laci' : 'di rekening / ditahan'}</small>
+                </span>
+                <span class="dompet__val ${r.saldo < 0 ? 'is-neg' : ''}">${U.rupiah(r.saldo)}</span>
+              </li>`).join('')}
+          </ul>
+        </section>`;
+      })()}
+
+      ${(() => {
         const stok = S.stockSummary(t);
         if (!stok.diaturCount) return '';
         const rows = stok.diatur.slice().sort((a, b) => a.sisa - b.sisa).slice(0, 6);
@@ -297,6 +329,10 @@
 
     root.querySelectorAll('[data-act=edit-target]').forEach(b =>
       b.addEventListener('click', () => targetModal(() => render(root))));
+
+    const aturKas = root.querySelector('[data-act=atur-kas]');
+    if (aturKas) aturKas.addEventListener('click', () =>
+      global.Forms.cashAdjustModal(() => { global.App.refreshShell(); render(root); }));
 
     const emptyBtn = root.querySelector('[data-empty-action]');
     if (emptyBtn) emptyBtn.addEventListener('click', () => UI.navigate('kasir'));

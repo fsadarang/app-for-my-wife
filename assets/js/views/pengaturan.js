@@ -334,7 +334,7 @@
         </div>
       </section>
 
-      <p class="app-version">Dapur Kita • <b>versi 2.1</b> • dibuat dengan ❤️ untuk usaha makanan rumahan</p>`;
+      <p class="app-version">Dapur Kita • <b>versi 2.2</b> • dibuat dengan ❤️ untuk usaha makanan rumahan</p>`;
 
     bind(root);
   }
