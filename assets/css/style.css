@@ -1855,21 +1855,50 @@ kbd {
 .kas-split__val { font-size: .92rem; font-weight: 800; white-space: nowrap; }
 .kas-split__val.is-neg { color: var(--expense); }
 
-/* Rincian saldo per cara bayar — kartu di Beranda */
+/* Saldo dikelompokkan Tunai / Non-Tunai — kartu di Beranda */
 .card--dompet { border-color: color-mix(in srgb, var(--cash) 28%, var(--border)); }
-.dompet { display: flex; flex-direction: column; gap: 2px; }
-.dompet__row {
+.dompet { display: flex; flex-direction: column; gap: 8px; }
+.dompet__grup {
   display: flex; align-items: center; gap: 11px;
-  padding: 9px 11px; border-radius: var(--r);
+  padding: 12px 13px; border-radius: var(--r-md);
+  border: 1px solid var(--border); background: var(--surface-2);
 }
-.dompet__row.is-tunai { background: var(--income-soft); }
-.dompet__emoji { font-size: 1.25rem; flex: none; }
-.dompet__name { flex: 1; min-width: 0; font-size: .88rem; font-weight: 650; }
-.dompet__name small { display: block; font-size: .71rem; font-weight: 500; color: var(--text-3); }
-.dompet__row.is-tunai .dompet__name small { color: var(--income); }
-.dompet__val { font-size: .98rem; font-weight: 800; white-space: nowrap; }
+.dompet__grup.is-tunai {
+  background: var(--income-soft);
+  border-color: color-mix(in srgb, var(--income) 30%, transparent);
+}
+.dompet__grup.is-nontunai {
+  background: var(--cash-soft);
+  border-color: color-mix(in srgb, var(--cash) 26%, transparent);
+  margin-bottom: -4px;
+}
+.dompet__emoji { font-size: 1.4rem; flex: none; }
+.dompet__name { flex: 1; min-width: 0; font-size: .95rem; font-weight: 750; }
+.dompet__name small {
+  display: block; font-size: .72rem; font-weight: 500; color: var(--text-3);
+  line-height: 1.35; margin-top: 1px;
+}
+.dompet__grup.is-tunai .dompet__name small { color: var(--income); }
+.dompet__grup.is-nontunai .dompet__name small { color: var(--cash); }
+.dompet__val { font-size: 1.05rem; font-weight: 800; white-space: nowrap; }
 .dompet__val.is-neg { color: var(--expense); }
+
+/* Rincian di dalam Non-Tunai */
+.dompet__sub {
+  display: flex; flex-direction: column;
+  margin-left: 22px; padding-left: 13px;
+  border-left: 2px solid color-mix(in srgb, var(--cash) 30%, transparent);
+}
+.dompet__subrow { display: flex; align-items: center; gap: 9px; padding: 6px 2px; }
+.dompet__subemoji { font-size: .95rem; flex: none; }
+.dompet__subname { flex: 1; min-width: 0; font-size: .82rem; color: var(--text-2); }
+.dompet__subval { font-size: .84rem; font-weight: 700; white-space: nowrap; }
+.dompet__subval.is-neg { color: var(--expense); }
+
 .card--dompet .link { background: none; border: none; cursor: pointer; }
+
+.kas-split__row.is-nontunai { background: var(--cash-soft); }
+.kas-split__row.is-nontunai .kas-split__name small { color: var(--cash); }
 
 .kas-diff {
   display: flex; align-items: flex-start; gap: 8px;

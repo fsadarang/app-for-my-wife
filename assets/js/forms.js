@@ -650,8 +650,8 @@
   function cashAdjustModal(onDone) {
     const st = S.get();
     const total = S.cashBalance();
-    const perCara = S.balanceByMethod();
-    const tunai = perCara.find(r => r.id === 'tunai') || { saldo: 0, modalAwal: 0, masuk: 0, keluar: 0 };
+    const grup = S.balanceGrouped();
+    const tunai = grup.tunai;
     const modalAwal = Number(st.profile.startingCash) || 0;
 
     // Yang bisa dihitung dengan tangan hanya uang tunai. QRIS, transfer,
@@ -665,15 +665,22 @@
         </div>
 
         <div class="kas-split">
-          ${perCara.map(r => `
-            <div class="kas-split__row${r.id === 'tunai' ? ' is-tunai' : ''}">
-              <span class="kas-split__emoji">${r.emoji}</span>
-              <span class="kas-split__name">
-                ${U.escapeHtml(r.name)}
-                ${r.id === 'tunai' ? '<small>ada di laci</small>' : '<small>bukan uang di laci</small>'}
-              </span>
-              <strong class="kas-split__val ${r.saldo < 0 ? 'is-neg' : ''}">${U.rupiah(r.saldo)}</strong>
-            </div>`).join('')}
+          <div class="kas-split__row is-tunai">
+            <span class="kas-split__emoji">${grup.tunai.emoji}</span>
+            <span class="kas-split__name">
+              ${U.escapeHtml(grup.tunai.name)}
+              <small>bisa dipegang hari ini</small>
+            </span>
+            <strong class="kas-split__val ${grup.tunai.saldo < 0 ? 'is-neg' : ''}">${U.rupiah(grup.tunai.saldo)}</strong>
+          </div>
+          <div class="kas-split__row is-nontunai">
+            <span class="kas-split__emoji">${grup.nonTunai.emoji}</span>
+            <span class="kas-split__name">
+              ${U.escapeHtml(grup.nonTunai.name)}
+              <small>${grup.nonTunai.rincian.map(r => r.name + ' ' + U.rupiah(r.saldo)).join(' • ')}</small>
+            </span>
+            <strong class="kas-split__val ${grup.nonTunai.saldo < 0 ? 'is-neg' : ''}">${U.rupiah(grup.nonTunai.saldo)}</strong>
+          </div>
         </div>
 
         <label class="field">
