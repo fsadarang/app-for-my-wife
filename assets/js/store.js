@@ -1213,6 +1213,38 @@
     return row ? row.saldo : 0;
   }
 
+  /**
+   * Saldo dikelompokkan jadi dua, sesuai yang penting sehari-hari:
+   * uang yang ADA DI LACI, dan uang yang TIDAK ada di laci.
+   *
+   * QRIS, transfer, dan ojol dijadikan satu "Non-Tunai" karena bagi
+   * pemilik warung sifatnya sama: uangnya nyata, tapi tidak bisa dipegang
+   * hari ini. Rinciannya tetap dibawa serta supaya masih bisa ditelusuri
+   * — terutama saldo ojol, yang perlu dicek pencairannya.
+   *
+   * Apa pun cara bayar selain tunai otomatis masuk Non-Tunai, jadi kalau
+   * nanti ada cara bayar baru, tidak ada yang perlu diubah di sini.
+   */
+  function balanceGrouped() {
+    const perCara = balanceByMethod();
+    const tunai = perCara.find(r => r.id === 'tunai') ||
+      { id: 'tunai', name: 'Tunai', emoji: '💵', modalAwal: 0, masuk: 0, keluar: 0, saldo: 0, jumlahTransaksi: 0 };
+    const rincian = perCara.filter(r => r.id !== 'tunai');
+    const jumlah = k => U.sum(rincian, r => r[k]);
+
+    const nonTunai = {
+      id: 'nontunai', name: 'Non-Tunai', emoji: '💳',
+      modalAwal: 0,
+      masuk: jumlah('masuk'),
+      keluar: jumlah('keluar'),
+      saldo: jumlah('saldo'),
+      jumlahTransaksi: jumlah('jumlahTransaksi'),
+      rincian: rincian
+    };
+
+    return { tunai: tunai, nonTunai: nonTunai, total: tunai.saldo + nonTunai.saldo };
+  }
+
   /** Deret harian untuk grafik */
   function dailySeries(from, to) {
     const byDate = U.groupBy(inRange(from, to), t => t.date);
@@ -1469,7 +1501,7 @@
     removeStockEntry, restoreStockEntry, stockOverview, stockSummary,
     stamp, markDeleted, unmarkDeleted, deletedIds, dropDeletedLocally,
     SYNCED_KEYS, markDirty, markAllDirty, clearDirty, dirtyIds, applyRemote, hasUserContent,
-    inRange, sortedDesc, summary, cashBalance, balanceByMethod, balanceOfMethod,
+    inRange, sortedDesc, summary, cashBalance, balanceByMethod, balanceOfMethod, balanceGrouped,
     dailySeries, topProducts,
     expenseByCategory, incomeByMethod, firstDate, customersByDay,
     seedProducts, seedDemoTransactions, hasDemoData, clearDemoData,
