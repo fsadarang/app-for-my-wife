@@ -79,8 +79,13 @@
     list = S.sortedDesc(list);
 
     // Ringkasan tetap memakai seluruh hasil saringan, meski yang digambar dibatasi.
-    const income = U.sum(list.filter(t => t.type === 'income'), t => t.total);
-    const expense = U.sum(list.filter(t => t.type === 'expense'), t => t.total);
+    //
+    // Penyesuaian saldo dikeluarkan dari hitungan Masuk/Keluar/Selisih:
+    // catatan itu hanya mengoreksi posisi kas, bukan penjualan atau
+    // belanja. Barisnya sendiri tetap ditampilkan di daftar bawah.
+    const nyata = S.tanpaPenyesuaian(list);
+    const income = U.sum(nyata.filter(t => t.type === 'income'), t => t.total);
+    const expense = U.sum(nyata.filter(t => t.type === 'expense'), t => t.total);
     const total = list.length;
     const visible = list.slice(0, shown);
     const byDate = U.groupBy(visible, t => t.date);
@@ -181,9 +186,12 @@
       <section class="trx-groups">
         ${visible.length ? Array.from(byDate.keys()).map(date => {
           const rows = byDate.get(date);
-          const dayIncomes = rows.filter(t => t.type === 'income');
+          // Sama seperti bilah ringkasan di atas: penyesuaian saldo tidak
+          // ikut dijumlahkan, dan tidak dihitung sebagai pelanggan.
+          const rowsNyata = S.tanpaPenyesuaian(rows);
+          const dayIncomes = rowsNyata.filter(t => t.type === 'income');
           const dIn = U.sum(dayIncomes, t => t.total);
-          const dOut = U.sum(rows.filter(t => t.type === 'expense'), t => t.total);
+          const dOut = U.sum(rowsNyata.filter(t => t.type === 'expense'), t => t.total);
           const dPorsi = U.sum(dayIncomes, t => U.sum(t.items || [], it => it.qty));
           return `
             <div class="trx-group">
@@ -332,12 +340,17 @@
     // Ringkasan nilainya ditampilkan supaya jelas apa yang akan hilang —
     // menghapus 60 catatan tanpa tahu nilainya terlalu mudah disesali.
     const dipilih = list.filter(t => terpilih.has(t.id));
-    const masuk = U.sum(dipilih.filter(t => t.type === 'income'), t => t.total);
-    const keluar = U.sum(dipilih.filter(t => t.type === 'expense'), t => t.total);
+    // Penyesuaian saldo disebut terpisah — menyebutnya "pengeluaran" akan
+    // menyesatkan, karena di Laporan pun ia tidak dihitung begitu.
+    const nyataDipilih = S.tanpaPenyesuaian(dipilih);
+    const penyesuaian = dipilih.filter(t => S.isAdjustment(t));
+    const masuk = U.sum(nyataDipilih.filter(t => t.type === 'income'), t => t.total);
+    const keluar = U.sum(nyataDipilih.filter(t => t.type === 'expense'), t => t.total);
     const rincian = [
       masuk ? `pemasukan ${U.rupiah(masuk)}` : '',
-      keluar ? `pengeluaran ${U.rupiah(keluar)}` : ''
-    ].filter(Boolean).join(' dan ');
+      keluar ? `pengeluaran ${U.rupiah(keluar)}` : '',
+      penyesuaian.length ? `${penyesuaian.length} penyesuaian saldo` : ''
+    ].filter(Boolean).join(', ');
 
     const ok = await UI.confirm({
       title: `Hapus ${ids.length} catatan?`,
