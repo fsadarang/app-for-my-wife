@@ -394,16 +394,19 @@ ${list.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxm
    * yang terjual, yang di-keep untuk pre-order, dan yang masih sisa.
    */
   function stockRows(from, to) {
-    const rows = [['Tanggal', 'Menu', 'Dibuat', 'Terjual', 'Ter-keep (Pre-Order)', 'Sisa',
-                   'Harga Satuan', 'Nilai Sisa']];
+    const rows = [['Tanggal', 'Menu', 'Isi per Porsi (pcs)', 'Dibuat (pcs)', 'Terjual (pcs)',
+                   'Ter-keep (Pre-Order)', 'Sisa (pcs)', 'Sisa (porsi)', 'Harga Satuan', 'Nilai Sisa']];
     const dates = Array.from(new Set((S().get().stocks || [])
       .map(s => s.date)
       .filter(d => (!from || d >= from) && (!to || d <= to)))).sort();
     dates.forEach(date => {
       S().stockOverview(date)
         .filter(r => r.diatur)
-        .forEach(r => rows.push([date, r.name, r.dibuat, r.terjual, r.dikeep, r.sisa,
-          r.price, r.nilaiSisa]));
+        .forEach(r => {
+          const isi = S().isiPorsi(r);
+          rows.push([date, r.name, isi, r.dibuat, r.terjual, r.dikeep, r.sisa,
+            S().porsiText(r.sisa, isi), r.price, r.nilaiSisa]);
+        });
     });
     return rows;
   }
@@ -428,7 +431,7 @@ ${list.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxm
       ['Total Pengeluaran', expense],
       ['Laba Bersih', income - expense],
       ['Jumlah Pelanggan', incomes.length],
-      ['Porsi Terjual', U.sum(incomes, t => U.sum(t.items || [], it => it.qty))],
+      ['Pcs Terjual', U.sum(incomes, t => U.sum(t.items || [], it => it.qty))],
       ['Rata-rata per Pelanggan', incomes.length ? Math.round(income / incomes.length) : 0],
       ['Jumlah Catatan Pengeluaran', expenses.length]
     ];
@@ -443,7 +446,7 @@ ${list.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxm
 
   /** Peringkat menu, supaya terlihat item mana yang paling laku */
   function menuRows(from, to) {
-    const rows = [['Menu', 'Jumlah Terjual', 'Omzet', 'Modal (HPP)', 'Untung']];
+    const rows = [['Menu', 'Jumlah Terjual (pcs)', 'Omzet', 'Modal (HPP)', 'Untung']];
     S().topProducts(from, to).forEach(r => {
       rows.push([r.name, r.qty, r.revenue, r.cost, r.profit]);
     });

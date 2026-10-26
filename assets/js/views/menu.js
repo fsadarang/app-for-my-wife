@@ -95,7 +95,7 @@
     const groups = U.groupBy(list, p => p.group || 'Lainnya');
 
     host.innerHTML = `
-      ${UI.tipCard('menu-hpp', `Isi <b>HPP</b> (modal bahan per porsi) pada tiap menu. Dari situ aplikasi bisa menghitung menu mana yang paling menguntungkan — bukan sekadar paling laris.`)}
+      ${UI.tipCard('menu-hpp', `Isi <b>HPP</b> (modal bahan per pcs) pada tiap menu. Dari situ aplikasi bisa menghitung menu mana yang paling menguntungkan — bukan sekadar paling laris.`)}
 
       <div class="stat-row">
         <div class="stat-mini"><span>${I.get('book', 16)} Jumlah menu</span><strong>${products.length}</strong></div>
@@ -166,13 +166,15 @@
     const pct = p.price ? (profit / p.price) * 100 : 0;
     const tone = !hasCost ? 'none' : profit <= 0 ? 'bad' : pct < 25 ? 'warn' : 'good';
     const inactive = p.active === false;
+    const isi = S.isiPorsi(p);
 
     return `
       <article class="menu-card${inactive ? ' is-inactive' : ''}" data-edit="${p.id}" tabindex="0" role="button" aria-label="Ubah ${U.escapeHtml(p.name)}">
         <span class="menu-card__emoji">${p.emoji || '🍽️'}</span>
         <div class="menu-card__body">
           <h3 class="menu-card__name">${U.escapeHtml(p.name)}${inactive ? ' <span class="badge badge--muted">disembunyikan</span>' : ''}</h3>
-          <p class="menu-card__price">${U.rupiah(p.price)}</p>
+          <p class="menu-card__price">${U.rupiah(p.price)}<small> / pcs</small>${isi > 1
+            ? ` <span class="menu-card__porsi">1 porsi = ${U.number(isi)} pcs</span>` : ''}</p>
           <p class="menu-card__margin is-${tone}">
             ${hasCost
               ? `${I.get('scale', 14)} Modal ${U.rupiah(p.cost)} → untung ${U.rupiah(profit)} (${pct.toFixed(0)}%)`
@@ -192,7 +194,7 @@
   /* ---------- Tab: Stok ---------- */
 
   /**
-   * Berapa porsi tiap varian yang tersedia pada satu tanggal, dipisah
+   * Berapa pcs tiap varian yang tersedia pada satu tanggal, dipisah
    * antara yang sudah terjual dan yang di-keep untuk pre-order, supaya
    * angka "sisa" benar-benar bisa dijual ke pembeli yang datang.
    */
@@ -362,6 +364,7 @@
   function stockRow(r) {
     const tone = !r.diatur ? 'none' : r.sisa < 0 ? 'bad' : r.sisa === 0 ? 'bad' : r.sisa <= S.LOW_STOCK ? 'warn' : 'good';
     const clickable = !!r.productId;
+    const isi = S.isiPorsi(r);
     return `
       <li class="stock-row is-${tone}"${clickable ? ` data-stock="${r.productId}" tabindex="0" role="button" aria-label="Atur stok ${U.escapeHtml(r.name)}"` : ''}>
         <span class="stock-row__emoji">${r.emoji || '🍽️'}</span>
@@ -374,14 +377,16 @@
           </p>
           ${clickable ? `
             <div class="stock-row__quick">
-              <button type="button" class="chip chip--mini" data-add-stock="${r.productId}" data-qty="5">+5</button>
-              <button type="button" class="chip chip--mini" data-add-stock="${r.productId}" data-qty="10">+10</button>
+              ${(isi > 1 ? [1, 2] : [5, 10]).map(n => `
+                <button type="button" class="chip chip--mini" data-add-stock="${r.productId}" data-qty="${n * isi}">+${isi > 1 ? `${n} porsi` : n}</button>`).join('')}
               <span class="stock-row__hint">ketuk baris untuk atur</span>
             </div>` : ''}
         </div>
         <div class="stock-row__right">
           <span class="stock-row__left-label">Sisa</span>
           <strong class="stock-row__left">${r.diatur ? r.sisa : '–'}</strong>
+          ${r.diatur && isi > 1 && r.sisa > 0
+            ? `<span class="stock-row__porsi">${U.escapeHtml(S.porsiText(r.sisa, isi))}</span>` : ''}
           ${r.diatur
             ? `<span class="stock-row__money">${r.sisa > 0 ? U.rupiah(r.nilaiSisa) : '&nbsp;'}</span>`
             : '<span class="stock-row__unset">belum diatur</span>'}

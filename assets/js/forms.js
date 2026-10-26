@@ -10,6 +10,7 @@
   const S = global.Store;
 
   const QUICK_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000];
+  const PORSI_CEPAT = S.PORSI_CEPAT;
 
   /* ---------- Potongan markup ---------- */
 
@@ -261,7 +262,7 @@
       <tr data-idx="${idx}">
         <td class="detail__item">
           <span class="detail__emoji">${it.emoji || '🍽️'}</span>
-          <span>${U.escapeHtml(it.name)}<small>${U.rupiah(it.price)} / porsi</small></span>
+          <span>${U.escapeHtml(it.name)}<small>${U.rupiah(it.price)} / pcs</small></span>
         </td>
         <td class="detail__qty">
           <div class="stepper stepper--sm">
@@ -481,6 +482,7 @@
     const groups = S.productGroups();
     const emoji = existing ? existing.emoji : '🍽️';
     const group = existing ? existing.group : 'Makanan';
+    const isi = S.isiPorsi(existing);
 
     const body = `
       <form class="form" id="productForm" novalidate>
@@ -528,11 +530,25 @@
         </div>
 
         <div class="margin-preview" data-margin>
-          <span class="margin-preview__label">${I.get('scale', 16)} Untung per porsi</span>
+          <span class="margin-preview__label">${I.get('scale', 16)} Untung per pcs</span>
           <span class="margin-preview__value" data-margin-value>–</span>
         </div>
         <p class="form__hint form__hint--muted">
-          ${I.get('bulb', 15)} HPP adalah modal bahan untuk membuat satu porsi. Diisi supaya kamu tahu menu mana yang paling menguntungkan.
+          ${I.get('bulb', 15)} <span>Harga jual dan HPP dihitung <b>per pcs</b> — modal bahan untuk membuat satu buah.</span>
+        </p>
+
+        <label class="field">
+          <span class="field__label">Isi per porsi <span class="field__hint">berapa pcs dihitung 1 porsi</span></span>
+          <div class="porsi-field">
+            <input type="number" id="prodPorsi" inputmode="numeric" min="1" max="999" step="1"
+                   value="${isi}">
+            <span class="porsi-field__unit">pcs / porsi</span>
+          </div>
+          <span class="field__note" data-porsi-note></span>
+        </label>
+        <p class="form__hint form__hint--muted">
+          ${I.get('info', 15)} <span>Dipakai untuk tombol cepat <b>1 / 5 / 10 porsi</b> di Kasir.
+          Isi <b>1</b> kalau menu ini memang dijual satuan.</span>
         </p>
       </form>`;
 
@@ -593,6 +609,21 @@
         costInput.addEventListener('input', updateMargin);
         updateMargin();
 
+        // Pratinjau isi porsi: "1 porsi = 5 pcs = Rp 10.000", supaya
+        // angkanya langsung bisa dicocokkan dengan harga yang biasa dipakai.
+        const porsiInput = root.querySelector('#prodPorsi');
+        const porsiNote = root.querySelector('[data-porsi-note]');
+        const updatePorsi = () => {
+          const n = S.isiPorsi(porsiInput.value);
+          const price = U.parseNumber(priceInput.value);
+          porsiNote.innerHTML = n <= 1
+            ? 'Dijual satuan — 1 porsi = 1 pcs.'
+            : `1 porsi = <b>${U.number(n)} pcs</b>${price ? ` = <b>${U.rupiah(n * price)}</b>` : ''}`;
+        };
+        porsiInput.addEventListener('input', updatePorsi);
+        priceInput.addEventListener('input', updatePorsi);
+        updatePorsi();
+
         root.querySelector('[data-act=cancel]').addEventListener('click', () => handle.close());
 
         const del = root.querySelector('[data-act=delete]');
@@ -621,7 +652,8 @@
             name, price,
             cost: U.parseNumber(costInput.value),
             emoji: chosenEmoji,
-            group: form.group.value.trim() || 'Lainnya'
+            group: form.group.value.trim() || 'Lainnya',
+            isiPorsi: S.isiPorsi(porsiInput.value)
           };
           if (isEdit) { S.updateProduct(existing.id, data); global.UI.toast('Menu diperbarui', 'success'); }
           else { S.addProduct(data); global.UI.toast(`"${name}" ditambahkan ke menu`, 'success'); }
@@ -807,15 +839,20 @@
   /* ---------- Modal: Stok Harian ---------- */
 
   /**
-   * Atur berapa porsi satu menu yang tersedia pada satu tanggal.
+   * Atur berapa pcs satu menu yang tersedia pada satu tanggal.
    *
    * Angka pada kotak isian adalah TOTAL yang dibuat hari itu. Yang
-   * disimpan hanya selisihnya, jadi menambah 20 porsi sore hari tetap
+   * disimpan hanya selisihnya, jadi menambah 20 pcs sore hari tetap
    * tercatat sebagai penambahan tersendiri dan riwayatnya kelihatan.
    */
   function stockModal(product, date, onDone) {
     const d = date || U.today();
-    const chip = [5, 10, 20, 25, 50];
+    const isi = S.isiPorsi(product);
+    // Menu yang dijual per porsi lebih enak ditambah per porsi juga:
+    // sekali goreng biasanya sekian porsi, bukan sekian pcs ganjil.
+    const chip = isi > 1
+      ? [1, 2, 5, 10, 20].map(n => ({ n: n * isi, label: `${n} porsi` }))
+      : [5, 10, 20, 25, 50].map(n => ({ n: n, label: String(n) }));
 
     function stats() {
       const row = S.stockOverview(d).find(r => r.productId === product.id);
@@ -835,7 +872,7 @@
         </div>
 
         <label class="field">
-          <span class="field__label">Jumlah yang dibuat <span class="field__hint">porsi / pcs</span></span>
+          <span class="field__label">Jumlah yang dibuat <span class="field__hint">dalam pcs${isi > 1 ? ` — 1 porsi = ${U.number(isi)} pcs` : ''}</span></span>
           <div class="stock-input">
             <button type="button" class="stock-input__btn" data-step="-1" aria-label="Kurangi satu">${I.get('minus', 18)}</button>
             <input type="number" id="stockQty" inputmode="numeric" min="0" step="1" value="${start.dibuat}" data-autofocus aria-label="Jumlah yang dibuat">
@@ -844,7 +881,7 @@
         </label>
 
         <div class="chip-row chip-row--quick">
-          ${chip.map(n => `<button type="button" class="chip chip--quick" data-add="${n}">${I.get('plus', 13)} ${n}</button>`).join('')}
+          ${chip.map(c => `<button type="button" class="chip chip--quick" data-add="${c.n}">${I.get('plus', 13)} ${U.escapeHtml(c.label)}</button>`).join('')}
         </div>
 
         <div class="stock-preview" data-preview></div>
@@ -888,7 +925,8 @@
               <span>${I.get('calendar', 14)} Ter-keep (pre-order)</span><b>${s.dikeep}</b>
             </div>
             <div class="stock-preview__row stock-preview__row--total ${tone}">
-              <span>${I.get('package', 15)} Sisa bisa dijual</span><b>${sisa}</b>
+              <span>${I.get('package', 15)} Sisa bisa dijual</span>
+              <b>${sisa}${isi > 1 && sisa > 0 ? ` <small>(${U.escapeHtml(S.porsiText(sisa, isi))})</small>` : ''}</b>
             </div>
             ${sisa < 0 ? `<p class="stock-preview__warn">${I.get('alert', 14)} Yang terjual dan ter-keep sudah lebih banyak dari yang dibuat. Tambah jumlahnya kalau memang sempat bikin lagi.</p>` : ''}`;
         }
@@ -1161,20 +1199,29 @@
           if (!items.length) {
             itemsHost.innerHTML = `<p class="po-items__empty">${I.get('info', 15)} Belum ada menu. Pilih dari daftar di bawah.</p>`;
           } else {
-            itemsHost.innerHTML = items.map((it, i) => `
+            itemsHost.innerHTML = items.map((it, i) => {
+              const isi = S.isiPorsi(it);
+              return `
               <div class="po-item" data-i="${i}">
                 <span class="po-item__emoji">${it.emoji || '🍽️'}</span>
                 <div class="po-item__body">
                   <p class="po-item__name">${U.escapeHtml(it.name)}</p>
-                  <p class="po-item__price">${U.rupiah(it.price)} × ${it.qty} = <b>${U.rupiah(it.price * it.qty)}</b></p>
+                  <p class="po-item__price">${U.rupiah(it.price)} × ${U.number(it.qty)} pcs = <b>${U.rupiah(it.price * it.qty)}</b></p>
+                  ${isi > 1 ? `<p class="cart-item__porsi">${I.get('package', 12)} <b>${U.escapeHtml(S.porsiText(it.qty, isi))}</b></p>` : ''}
                 </div>
                 <div class="stepper stepper--sm">
                   <button type="button" class="stepper__btn" data-dec aria-label="Kurangi">${I.get('minus', 14)}</button>
-                  <span class="stepper__val">${it.qty}</span>
+                  <span class="stepper__val">${U.number(it.qty)}</span>
                   <button type="button" class="stepper__btn" data-inc aria-label="Tambah">${I.get('plus', 14)}</button>
                 </div>
                 <button type="button" class="icon-btn" data-del aria-label="Hapus">${I.get('trash', 15)}</button>
-              </div>`).join('') +
+                <div class="porsi-quick porsi-quick--full">
+                  ${PORSI_CEPAT.map(n => `
+                    <button type="button" class="chip chip--porsi${it.qty === n * isi ? ' is-active' : ''}"
+                            data-porsi="${n}">${n} ${isi > 1 ? 'porsi' : 'pcs'}</button>`).join('')}
+                </div>
+              </div>`;
+            }).join('') +
               `<div class="po-total"><span>Total pesanan</span><b>${U.rupiah(total())}</b></div>`;
           }
           saveBtn.disabled = items.length === 0;
@@ -1189,6 +1236,13 @@
               renderItems(); renderPicker();
             });
             node.querySelector('[data-del]').addEventListener('click', () => { items.splice(i, 1); renderItems(); renderPicker(); });
+            node.querySelectorAll('[data-porsi]').forEach(chip => {
+              chip.addEventListener('click', () => {
+                const n = Number(chip.dataset.porsi) || 1;
+                items[i].qty = Math.max(1, n * S.isiPorsi(items[i]));
+                renderItems(); renderPicker();
+              });
+            });
           });
         }
 
@@ -1204,21 +1258,28 @@
           }
           pickerHost.innerHTML = list.map(p => {
             const chosen = items.find(x => x.productId === p.id);
+            const isi = S.isiPorsi(p);
             return `
               <button type="button" class="po-pick${chosen ? ' is-chosen' : ''}" data-pick="${p.id}">
                 <span class="po-pick__emoji">${p.emoji || '🍽️'}</span>
-                <span class="po-pick__name">${U.escapeHtml(p.name)}</span>
+                <span class="po-pick__name">${U.escapeHtml(p.name)}${isi > 1
+                  ? `<small>1 porsi = ${U.number(isi)} pcs</small>` : ''}</span>
                 <span class="po-pick__price">${U.rupiah(p.price)}</span>
-                ${chosen ? `<span class="po-pick__badge">${chosen.qty}</span>` : ''}
+                ${chosen ? `<span class="po-pick__badge">${U.number(chosen.qty)}</span>` : ''}
               </button>`;
           }).join('');
           pickerHost.querySelectorAll('[data-pick]').forEach(btn => {
             btn.addEventListener('click', () => {
               const p = S.getProduct(btn.dataset.pick);
               if (!p) return;
+              // Sekali ketuk = satu porsi, sama seperti di Kasir.
+              const isi = S.isiPorsi(p);
               const found = items.find(x => x.productId === p.id);
-              if (found) found.qty += 1;
-              else items.push({ productId: p.id, name: p.name, emoji: p.emoji, qty: 1, price: p.price, cost: p.cost, note: '' });
+              if (found) { found.isiPorsi = isi; found.qty += isi; }
+              else items.push({
+                productId: p.id, name: p.name, emoji: p.emoji,
+                qty: isi, price: p.price, cost: p.cost, isiPorsi: isi, note: ''
+              });
               renderItems(); renderPicker();
             });
           });
@@ -1292,7 +1353,7 @@
           </ul>
           <div class="po-confirm__total"><span>Total tagihan</span><b>${U.rupiah(po.total)}</b></div>
         </div>
-        <p class="form__hint">${I.get('info', 16)} Setelah disimpan, nilainya baru masuk sebagai <b>pemasukan hari ini</b>.</p>
+        <p class="form__hint">${I.get('info', 16)} <span>Setelah disimpan, nilainya baru masuk sebagai <b>pemasukan hari ini</b>.</span></p>
         ${methodChips('tunai')}
         <div class="cash-box-pay" data-cash-block>
           <label class="field">
@@ -1381,12 +1442,16 @@
         <div class="receipt__divider"></div>
         ${(trx.items && trx.items.length) ? `
           <table class="receipt__table">
-            ${trx.items.map(it => `
+            ${trx.items.map(it => {
+              const isi = S.isiPorsi(it);
+              return `
               <tr>
-                <td>${it.emoji || ''} ${U.escapeHtml(it.name)}<br><small>${it.qty} × ${U.rupiah(it.price)}</small>
+                <td>${it.emoji || ''} ${U.escapeHtml(it.name)}<br><small>${U.number(it.qty)} pcs × ${U.rupiah(it.price)}</small>
+                  ${isi > 1 ? `<br><small>(${U.escapeHtml(S.porsiText(it.qty, isi))})</small>` : ''}
                   ${it.note ? `<br><small>* ${U.escapeHtml(it.note)}</small>` : ''}</td>
                 <td class="ta-r">${U.rupiah(it.qty * it.price)}</td>
-              </tr>`).join('')}
+              </tr>`;
+            }).join('')}
           </table>
           <div class="receipt__divider"></div>
           <table class="receipt__table">

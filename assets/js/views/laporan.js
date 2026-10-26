@@ -81,7 +81,7 @@
 
         <section class="report-cards">
           ${bigCard('Total Pemasukan', sum.income, prev.income, 'arrowUp', 'income',
-            `${sum.customerCount} pelanggan • ${U.number(sum.itemsSold)} porsi • rata-rata ${U.rupiah(sum.avgOrder)}/pelanggan`)}
+            `${sum.customerCount} pelanggan • ${U.number(sum.itemsSold)} pcs • rata-rata ${U.rupiah(sum.avgOrder)}/pelanggan`)}
           ${bigCard('Total Pengeluaran', sum.expense, prev.expense, 'arrowDown', 'expense',
             `${sum.expenseCount} catatan • ${sum.income ? ((sum.expense / sum.income) * 100).toFixed(0) + '% dari pemasukan' : 'belum ada pemasukan'}`, true)}
           ${bigCard('Laba Bersih', sum.profit, prev.profit, 'trendUp', sum.profit >= 0 ? 'profit' : 'loss',
@@ -342,7 +342,7 @@
       const weakest = withCost.slice().sort((a, b) => (a.profit / a.revenue) - (b.profit / b.revenue))[0];
       out.push({
         tone: 'good', emoji: star.emoji || '⭐', title: 'Menu penyumbang untung terbesar',
-        text: `<b>${U.escapeHtml(star.name)}</b> menghasilkan untung <b>${U.rupiah(star.profit)}</b> dari ${U.number(star.qty)} porsi. Pertimbangkan menonjolkannya saat menawarkan ke pembeli.`
+        text: `<b>${U.escapeHtml(star.name)}</b> menghasilkan untung <b>${U.rupiah(star.profit)}</b> dari ${U.number(star.qty)} pcs. Pertimbangkan menonjolkannya saat menawarkan ke pembeli.`
       });
       const wm = weakest.revenue ? (weakest.profit / weakest.revenue) * 100 : 0;
       if (wm < 20) {

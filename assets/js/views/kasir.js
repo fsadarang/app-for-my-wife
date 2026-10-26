@@ -21,6 +21,11 @@
   // 'pelanggan' = isi nama dulu, 'pesanan' = pilih menunya.
   let stage = 'pelanggan';
 
+  // Tombol cepat di tiap baris pesanan. Sekali ketuk langsung menetapkan
+  // jumlahnya jadi sekian porsi — bukan menambah — supaya hasilnya selalu
+  // sama persis dengan yang tertulis di tombolnya.
+  const PORSI_CEPAT = S.PORSI_CEPAT;
+
   function cartTotalQty() { return U.sum(cart, it => it.qty); }
   function cartSubtotal() { return U.sum(cart, it => it.qty * it.price); }
   function cartTotal() { return Math.max(0, cartSubtotal() - Math.min(discount, cartSubtotal())); }
@@ -61,7 +66,7 @@
           ${pending ? `
             <div class="order-start__pending">
               ${I.get('alert', 16)}
-              <span>Masih ada pesanan yang belum disimpan (${pending} item, ${U.rupiah(cartTotal())}).</span>
+              <span>Masih ada pesanan yang belum disimpan (${pending} menu, ${U.rupiah(cartTotal())}).</span>
               <button type="button" class="btn btn--soft" data-act="resume">Lanjutkan</button>
             </div>` : ''}
 
@@ -142,7 +147,7 @@
                 ? U.escapeHtml(customerName)
                 : 'Pesanan'}</h2>
               <div class="cart__head-actions">
-                <span class="cart__count" data-cart-count>0 item</span>
+                <span class="cart__count" data-cart-count>0 pcs</span>
                 <button type="button" class="icon-btn cart__collapse" data-act="close-cart" aria-label="Tutup pesanan">${I.get('chevronDown', 18)}</button>
               </div>
             </header>
@@ -258,14 +263,16 @@
       const stk = stockMap.get(p.id);
       const left = stk && stk.diatur ? stk.sisa - (inCart ? inCart.qty : 0) : null;
       const tone = left == null ? '' : left <= 0 ? ' is-out' : left <= S.LOW_STOCK ? ' is-low' : '';
+      const isi = S.isiPorsi(p);
       return `
         <button type="button" class="prod${inCart ? ' is-in-cart' : ''}${left != null && left <= 0 ? ' is-stock-out' : ''}" data-add="${p.id}">
-          ${inCart ? `<span class="prod__badge">${inCart.qty}</span>` : ''}
+          ${inCart ? `<span class="prod__badge">${U.escapeHtml(S.porsiText(inCart.qty, isi))}</span>` : ''}
           <span class="prod__emoji">${p.emoji || '🍽️'}</span>
           <span class="prod__name">${U.escapeHtml(p.name)}</span>
-          <span class="prod__price">${U.rupiah(p.price)}</span>
+          <span class="prod__price">${U.rupiah(p.price)}<small> / pcs</small></span>
+          ${isi > 1 ? `<span class="prod__porsi">1 porsi = ${U.number(isi)} pcs</span>` : ''}
           ${margin != null ? `<span class="prod__margin">untung ${margin}%</span>` : ''}
-          ${left != null ? `<span class="prod__stock${tone}">${I.get('package', 11)} ${left <= 0 ? 'habis' : 'sisa ' + left}</span>` : ''}
+          ${left != null ? `<span class="prod__stock${tone}">${I.get('package', 11)} ${left <= 0 ? 'habis' : 'sisa ' + U.number(left) + ' pcs'}</span>` : ''}
         </button>`;
     }).join('') + `
       <button type="button" class="prod prod--custom" data-act="custom-item">
@@ -308,16 +315,30 @@
     if (!row || !row.diatur) return;
     const left = row.sisa - qtyInCart;
     if (left >= 0) return;
-    UI.toast(`Stok "${row.name}" kurang ${Math.abs(left)} porsi — pesanan tetap bisa disimpan`, 'warn', 5000);
+    UI.toast(`Stok "${row.name}" kurang ${U.number(Math.abs(left))} pcs — pesanan tetap bisa disimpan`, 'warn', 5000);
   }
 
+  /**
+   * Sekali ketuk menu = satu porsi.
+   *
+   * Untuk menu yang dijual satuan (isi per porsi = 1) ini sama persis
+   * seperti sebelumnya: bertambah satu pcs. Untuk jalangkote yang satu
+   * porsinya 5 pcs, sekali ketuk langsung menambah 5 pcs — sesuai cara
+   * pembeli memesannya.
+   */
   function addToCart(productId) {
     const p = S.getProduct(productId);
     if (!p) return;
+    const isi = S.isiPorsi(p);
     const found = cart.find(c => c.productId === p.id);
-    if (found) found.qty += 1;
-    else cart.push({ productId: p.id, name: p.name, emoji: p.emoji, qty: 1, price: p.price, cost: p.cost });
-    warnIfOverStock(p.id, (found ? found.qty : 1));
+    // Isi porsi disegarkan dari menunya: kalau baru saja diubah di
+    // halaman Menu, pesanan yang sedang dibuat ikut memakai angka baru.
+    if (found) { found.isiPorsi = isi; found.qty += isi; }
+    else cart.push({
+      productId: p.id, name: p.name, emoji: p.emoji,
+      qty: isi, price: p.price, cost: p.cost, isiPorsi: isi
+    });
+    warnIfOverStock(p.id, (found ? found.qty : isi));
   }
 
   function renderCart(root) {
@@ -332,7 +353,7 @@
     const hpp = U.sum(cart, it => it.qty * it.cost);
     const estProfit = total - hpp;
 
-    root.querySelector('[data-cart-count]').textContent = `${qty} item`;
+    root.querySelector('[data-cart-count]').textContent = `${U.number(qty)} pcs`;
     root.querySelector('[data-bar-count]').textContent = qty;
     root.querySelector('[data-bar-total]').textContent = U.rupiah(total);
     bar.hidden = qty === 0;
@@ -349,27 +370,40 @@
       return;
     }
 
-    itemsHost.innerHTML = cart.map((it, i) => `
+    itemsHost.innerHTML = cart.map((it, i) => {
+      const isi = S.isiPorsi(it);
+      const satuan = isi > 1 ? 'porsi' : 'pcs';
+      return `
       <div class="cart-item" data-i="${i}">
         <span class="cart-item__emoji">${it.emoji || '🍽️'}</span>
         <div class="cart-item__body">
           <p class="cart-item__name">${U.escapeHtml(it.name)}</p>
-          <p class="cart-item__price">${U.rupiah(it.price)} × ${it.qty} = <b>${U.rupiah(it.price * it.qty)}</b></p>
+          <p class="cart-item__price">${U.rupiah(it.price)} × ${U.number(it.qty)} pcs = <b>${U.rupiah(it.price * it.qty)}</b></p>
+          ${isi > 1 ? `<p class="cart-item__porsi">${I.get('package', 12)} <b>${U.escapeHtml(S.porsiText(it.qty, isi))}</b> <span>· 1 porsi = ${U.number(isi)} pcs</span></p>` : ''}
           ${it.note ? `<p class="cart-item__note">${I.get('note', 12)} ${U.escapeHtml(it.note)}</p>` : ''}
+          <div class="porsi-quick" data-porsi-quick>
+            ${PORSI_CEPAT.map(n => `
+              <button type="button" class="chip chip--porsi${it.qty === n * isi ? ' is-active' : ''}"
+                      data-porsi="${n}">${n} ${satuan}</button>`).join('')}
+          </div>
         </div>
         <div class="cart-item__controls">
           <div class="stepper">
-            <button type="button" class="stepper__btn" data-dec aria-label="Kurangi ${U.escapeHtml(it.name)}">${I.get('minus', 15)}</button>
-            <span class="stepper__val">${it.qty}</span>
-            <button type="button" class="stepper__btn" data-inc aria-label="Tambah ${U.escapeHtml(it.name)}">${I.get('plus', 15)}</button>
+            <button type="button" class="stepper__btn" data-dec aria-label="Kurangi ${U.escapeHtml(it.name)} satu pcs">${I.get('minus', 15)}</button>
+            <button type="button" class="stepper__val stepper__val--btn" data-qty-edit
+                    aria-label="Atur jumlah ${U.escapeHtml(it.name)}" title="Ketuk untuk mengetik jumlah persis">
+              ${U.number(it.qty)}${I.get('edit', 11, 'stepper__pen')}</button>
+            <button type="button" class="stepper__btn" data-inc aria-label="Tambah ${U.escapeHtml(it.name)} satu pcs">${I.get('plus', 15)}</button>
           </div>
+          <span class="stepper__unit">pcs</span>
           <div class="cart-item__tools">
             <button type="button" class="cart-item__note-btn${it.note ? ' is-set' : ''}" data-note
                     aria-label="Catatan untuk ${U.escapeHtml(it.name)}">${I.get('note', 14)} Catatan</button>
             <button type="button" class="icon-btn cart-item__del" data-del aria-label="Hapus ${U.escapeHtml(it.name)}">${I.get('trash', 15)}</button>
           </div>
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     const isToday = saleDate === U.today();
     const isCash = payMethod === 'tunai';
@@ -454,6 +488,21 @@
         cart.splice(i, 1); renderCart(root); renderGrid(root);
       });
       node.querySelector('[data-note]').addEventListener('click', () => itemNoteModal(root, i));
+
+      // Tombol porsi cepat: MENETAPKAN jumlahnya, bukan menambah. Ditekan
+      // dua kali hasilnya tetap sama — tidak ada risiko kelebihan diam-diam.
+      node.querySelectorAll('[data-porsi]').forEach(chip => {
+        chip.addEventListener('click', () => {
+          const n = Number(chip.dataset.porsi) || 1;
+          cart[i].qty = Math.max(1, n * S.isiPorsi(cart[i]));
+          if (cart[i].productId) warnIfOverStock(cart[i].productId, cart[i].qty);
+          renderCart(root); renderGrid(root);
+        });
+      });
+
+      node.querySelectorAll('[data-qty-edit]').forEach(btn => {
+        btn.addEventListener('click', () => qtyModal(root, i));
+      });
     });
 
     /** Perbarui angka total tanpa menggambar ulang, supaya fokus ketikan tidak lompat */
@@ -576,6 +625,101 @@
           cart[index].note = e.target.note.value.trim();
           h.close();
           renderCart(root);
+        });
+      }
+    });
+  }
+
+  /**
+   * Atur jumlah persis — untuk yang tidak tertutup tombol 1/5/10 porsi,
+   * misalnya 2 porsi, 7 porsi, atau 3 pcs eceran. Porsi dan pcs selalu
+   * saling mengikuti supaya tidak bisa terisi dua angka yang bertentangan.
+   */
+  function qtyModal(root, index) {
+    const item = cart[index];
+    if (!item) return;
+    const isi = S.isiPorsi(item);
+    const pakaiPorsi = isi > 1;
+
+    UI.modal({
+      title: 'Atur Jumlah',
+      subtitle: item.name,
+      icon: 'package',
+      size: 'sm',
+      body: `
+        <form class="form" id="qtyForm" novalidate>
+          ${pakaiPorsi ? `
+            <label class="field">
+              <span class="field__label">Berapa porsi <span class="field__hint">1 porsi = ${U.number(isi)} pcs</span></span>
+              <div class="stepper stepper--wide">
+                <button type="button" class="stepper__btn" data-porsi-dec aria-label="Kurangi satu porsi">${I.get('minus', 16)}</button>
+                <input type="number" id="qtyPorsi" inputmode="numeric" min="0" max="9999" step="1" class="stepper__input">
+                <button type="button" class="stepper__btn" data-porsi-inc aria-label="Tambah satu porsi">${I.get('plus', 16)}</button>
+              </div>
+            </label>` : ''}
+
+          <label class="field">
+            <span class="field__label">Jumlah pcs${pakaiPorsi ? ' <span class="field__hint">boleh tidak pas sekian porsi</span>' : ''}</span>
+            <div class="stepper stepper--wide">
+              <button type="button" class="stepper__btn" data-pcs-dec aria-label="Kurangi satu pcs">${I.get('minus', 16)}</button>
+              <input type="number" id="qtyPcs" inputmode="numeric" min="1" max="99999" step="1" data-autofocus
+                     class="stepper__input" value="${item.qty}">
+              <button type="button" class="stepper__btn" data-pcs-inc aria-label="Tambah satu pcs">${I.get('plus', 16)}</button>
+            </div>
+          </label>
+
+          <div class="qty-preview" data-qty-preview></div>
+        </form>`,
+      footer: `<span class="spacer"></span>
+        <button type="button" class="btn btn--ghost" data-act="cancel">Batal</button>
+        <button type="submit" form="qtyForm" class="btn btn--primary">${I.get('check', 18)} Pakai Jumlah Ini</button>`,
+      onMount: h => {
+        const pcsEl = h.root.querySelector('#qtyPcs');
+        const porsiEl = h.root.querySelector('#qtyPorsi');
+        const preview = h.root.querySelector('[data-qty-preview]');
+
+        const bacaPcs = () => Math.max(1, Math.floor(Number(pcsEl.value) || 0) || 1);
+
+        const gambar = (dariPorsi) => {
+          const pcs = bacaPcs();
+          if (porsiEl && !dariPorsi) porsiEl.value = Math.floor(pcs / isi);
+          preview.innerHTML = `
+            <span class="qty-preview__main">${U.escapeHtml(S.porsiText(pcs, isi))}</span>
+            <span class="qty-preview__sub">${U.rupiah(item.price)} × ${U.number(pcs)} pcs</span>
+            <strong class="qty-preview__total">${U.rupiah(pcs * item.price)}</strong>`;
+        };
+
+        const setPcs = (n, dariPorsi) => {
+          pcsEl.value = Math.max(1, n);
+          gambar(dariPorsi);
+        };
+
+        pcsEl.addEventListener('input', () => gambar(false));
+        h.root.querySelector('[data-pcs-dec]').addEventListener('click', () => setPcs(bacaPcs() - 1, false));
+        h.root.querySelector('[data-pcs-inc]').addEventListener('click', () => setPcs(bacaPcs() + 1, false));
+
+        if (porsiEl) {
+          const bacaPorsi = () => Math.max(0, Math.floor(Number(porsiEl.value) || 0));
+          const dariPorsi = () => setPcs(Math.max(1, bacaPorsi() * isi), true);
+          porsiEl.addEventListener('input', dariPorsi);
+          h.root.querySelector('[data-porsi-dec]').addEventListener('click', () => {
+            porsiEl.value = Math.max(0, bacaPorsi() - 1); dariPorsi();
+          });
+          h.root.querySelector('[data-porsi-inc]').addEventListener('click', () => {
+            porsiEl.value = bacaPorsi() + 1; dariPorsi();
+          });
+        }
+
+        gambar(false);
+
+        h.root.querySelector('[data-act=cancel]').addEventListener('click', () => h.close());
+        h.root.querySelector('#qtyForm').addEventListener('submit', e => {
+          e.preventDefault();
+          if (!cart[index]) { h.close(); return; }
+          cart[index].qty = bacaPcs();
+          if (cart[index].productId) warnIfOverStock(cart[index].productId, cart[index].qty);
+          h.close();
+          renderCart(root); renderGrid(root);
         });
       }
     });

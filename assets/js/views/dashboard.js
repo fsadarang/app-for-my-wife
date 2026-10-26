@@ -88,7 +88,7 @@
             label: 'Pemasukan', icon: 'arrowUp', tone: 'income',
             value: U.rupiah(todaySum.income),
             change: U.pctChange(todaySum.income, ydaySum.income),
-            hint: `${todaySum.customerCount} pelanggan • ${U.number(todaySum.itemsSold)} porsi`
+            hint: `${todaySum.customerCount} pelanggan • ${U.number(todaySum.itemsSold)} pcs`
           })}
           ${kpiCard({
             label: 'Pengeluaran', icon: 'arrowDown', tone: 'expense',
@@ -119,7 +119,7 @@
           <div class="card__head">
             <div>
               <h2 class="card__title">${I.get('calendar', 18)} Pre-Order Menunggu</h2>
-              <p class="card__sub">${po.pendingCount} pesanan • ${U.number(po.pendingItems)} porsi • ${U.rupiah(po.pendingValue)}</p>
+              <p class="card__sub">${po.pendingCount} pesanan • ${U.number(po.pendingItems)} pcs • ${U.rupiah(po.pendingValue)}</p>
             </div>
             <a class="link" href="#/preorder">Buka semua ${I.get('chevronRight', 14)}</a>
           </div>
@@ -130,7 +130,7 @@
               return `<li class="po-mini__row">
                 <span class="po-badge po-badge--${d.tone}">${d.label}</span>
                 <span class="po-mini__name">${U.escapeHtml(x.customerName || 'Tanpa nama')}</span>
-                <span class="po-mini__qty">${U.number(U.sum(x.items || [], it => it.qty))} porsi</span>
+                <span class="po-mini__qty">${U.number(U.sum(x.items || [], it => it.qty))} pcs</span>
               </li>`;
             }).join('')}
           </ul>` : `<p class="card__sub">Pesanan terdekat masih beberapa hari lagi.</p>`}
@@ -286,7 +286,7 @@
                   <div class="rank__body">
                     <div class="rank__line">
                       <span class="rank__name">${U.escapeHtml(r.name)}</span>
-                      <span class="rank__qty">${U.number(r.qty)} porsi</span>
+                      <span class="rank__qty">${U.number(r.qty)} pcs</span>
                     </div>
                     <div class="rank__bar"><i style="width:${Math.max(6, (r.qty / max) * 100)}%"></i></div>
                     <div class="rank__meta">Omzet ${U.rupiah(r.revenue)}${r.cost ? ` • Untung ${U.rupiah(r.profit)}` : ''}</div>
