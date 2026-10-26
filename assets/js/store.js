@@ -6,7 +6,7 @@
 
   const U = global.Utils;
   const KEY = 'dapurku.data.v1';
-  const SCHEMA = 6;   // 6: penyesuaian saldo tidak lagi dihitung untung-rugi
+  const SCHEMA = 7;   // 7: tiap menu punya "isi per porsi" (1 porsi = berapa pcs)
 
   // Catatan penyesuaian yang dibuat versi sebelumnya dikenali dari catatannya
   const CATATAN_PENYESUAIAN = ['Penyesuaian saldo kas', 'Penyesuaian saldo tunai'];
@@ -14,6 +14,9 @@
   // Kelompok catatan yang ikut disinkronkan antar perangkat
   const SYNCED_KEYS = ['transactions', 'products', 'preorders', 'stocks', 'expenseCategories'];
   const LOW_STOCK = 5;   // sisa segini atau kurang dianggap "menipis"
+
+  // Tombol jumlah cepat di Kasir dan Pre-Order: "1 porsi", "5 porsi", "10 porsi"
+  const PORSI_CEPAT = [1, 5, 10];
 
   /* ---------- Data bawaan ---------- */
 
@@ -165,8 +168,49 @@
       }
     });
 
+    // Skema 6 -> 7: tiap menu kini menyimpan "isi per porsi" — berapa pcs
+    // yang dihitung sebagai satu porsi. Menu lama diisi 1 supaya tidak ada
+    // yang berubah: 1 porsi = 1 pcs, persis seperti sebelumnya.
+    s.products.forEach(p => {
+      if (p && p.isiPorsi === undefined) p.isiPorsi = 1;
+    });
+
     s.schema = SCHEMA;
     return s;
+  }
+
+  /* ---------- Porsi: satu porsi berisi berapa pcs ---------- */
+
+  /**
+   * Jalangkote dijual per pcs, tapi pembeli biasanya minta per "porsi" —
+   * dan isi satu porsi berbeda tiap varian (ori 5 pcs, mercon 4 pcs).
+   *
+   * Yang disimpan di catatan penjualan tetap jumlah PCS, supaya stok,
+   * harga, dan laporan tidak perlu diubah sama sekali. Porsi hanya cara
+   * menghitung dan menampilkan yang lebih enak dipakai saat melayani.
+   *
+   * Nilainya diambil dari apa saja: produk, item di keranjang, atau angka
+   * polos. Berapa pun isinya, hasilnya tidak pernah kurang dari 1.
+   */
+  function isiPorsi(sumber) {
+    const nilai = (sumber && typeof sumber === 'object') ? sumber.isiPorsi : sumber;
+    const n = Math.floor(Number(nilai) || 0);
+    return n > 0 ? n : 1;
+  }
+
+  /** Pecah jumlah pcs jadi berapa porsi penuh dan berapa pcs sisanya */
+  function pecahPorsi(qty, sumber) {
+    const isi = isiPorsi(sumber);
+    const pcs = Math.max(0, Math.floor(Number(qty) || 0));
+    return { isi: isi, pcs: pcs, porsi: Math.floor(pcs / isi), sisa: pcs % isi };
+  }
+
+  /** Tulisan singkat: "5 porsi", "5 porsi + 2 pcs", atau "3 pcs" */
+  function porsiText(qty, sumber) {
+    const d = pecahPorsi(qty, sumber);
+    if (d.isi <= 1) return `${U.number(d.pcs)} pcs`;
+    if (!d.porsi) return `${U.number(d.sisa)} pcs`;
+    return `${U.number(d.porsi)} porsi${d.sisa ? ' + ' + U.number(d.sisa) + ' pcs' : ''}`;
   }
 
   /**
@@ -504,6 +548,7 @@
       price: Math.max(0, Number(data.price) || 0),
       cost: Math.max(0, Number(data.cost) || 0),
       group: data.group || 'Makanan',
+      isiPorsi: isiPorsi(data.isiPorsi),
       active: data.active !== false,
       createdAt: new Date().toISOString()
     };
@@ -521,6 +566,7 @@
     if (patch.price != null) p.price = Math.max(0, Number(patch.price) || 0);
     if (patch.cost != null) p.cost = Math.max(0, Number(patch.cost) || 0);
     if (patch.group != null) p.group = patch.group;
+    if (patch.isiPorsi != null) p.isiPorsi = isiPorsi(patch.isiPorsi);
     if (patch.active != null) p.active = !!patch.active;
     stamp(p);
     commit();
@@ -599,6 +645,9 @@
       qty: Math.max(1, Number(it.qty) || 1),
       price: Math.max(0, Number(it.price) || 0),
       cost: Math.max(0, Number(it.cost) || 0),
+      // Isi porsi ikut disalin seperti harga: kalau menunya nanti diubah
+      // jadi 6 pcs per porsi, struk lama tetap terbaca seperti saat dijual.
+      isiPorsi: isiPorsi(it.isiPorsi),
       note: (it.note || '').trim()
     }));
   }
@@ -1025,6 +1074,7 @@
         emoji: p.emoji,
         group: p.group || '',
         price: p.price || 0,
+        isiPorsi: isiPorsi(p),
         active: p.active !== false,
         hilang: false,
         dibuat: 0, terjual: 0, dikeep: 0, sisa: 0, diatur: false
@@ -1046,6 +1096,7 @@
           emoji: item.emoji || '🍽️',
           group: '',
           price: item.price || 0,
+          isiPorsi: isiPorsi(item),
           active: false,
           hilang: true,
           dibuat: 0, terjual: 0, dikeep: 0, sisa: 0, diatur: false
@@ -1531,10 +1582,11 @@
   }
 
   global.Store = {
-    KEY, SCHEMA, LOW_STOCK, PAYMENT_METHODS, DEFAULT_EXPENSE_CATEGORIES,
+    KEY, SCHEMA, LOW_STOCK, PORSI_CEPAT, PAYMENT_METHODS, DEFAULT_EXPENSE_CATEGORIES,
     load, get, subscribe, commit, persist, isStorageOK, isStored, reloadFromStorage,
     updateProfile, updateSettings,
     productGroups, addProduct, updateProduct, removeProduct, getProduct,
+    isiPorsi, pecahPorsi, porsiText,
     addCategory, updateCategory, removeCategory, getCategory,
     addIncome, addExpense, updateTransaction, removeTransaction, restoreTransaction, getTransaction,
     removeTransactions, restoreTransactions,

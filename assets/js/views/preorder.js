@@ -21,7 +21,7 @@
 
   function poCard(po) {
     const d = dueInfo(po.dueDate);
-    const porsi = U.sum(po.items || [], it => it.qty);
+    const pcs = U.sum(po.items || [], it => it.qty);
     const done = po.status === 'selesai';
     return `
       <article class="po-card po-card--${done ? 'done' : d.tone}" data-po="${po.id}">
@@ -43,7 +43,7 @@
 
         <div class="po-card__meta">
           <span>${I.get('calendar', 14)} ${U.formatDate(po.dueDate, true)}${po.dueTime ? ' • ' + po.dueTime : ''}</span>
-          <span>${I.get('package', 14)} ${U.number(porsi)} porsi</span>
+          <span>${I.get('package', 14)} ${U.number(pcs)} pcs</span>
           <span class="po-card__total">${U.rupiah(po.total)}</span>
         </div>
         ${po.note ? `<p class="po-card__note">${I.get('note', 13)} ${U.escapeHtml(po.note)}</p>` : ''}
@@ -69,7 +69,7 @@
       .sort((a, b) => String(b.completedAt || '').localeCompare(String(a.completedAt || '')));
     const list = tab === 'selesai' ? done : sum.pending;
 
-    // Rekap produksi: untuk hari ini dan besok, berapa porsi yang harus dibuat
+    // Rekap produksi: untuk hari ini dan besok, berapa pcs yang harus dibuat
     const planToday = S.productionPlan(U.today());
     const planTomorrow = S.productionPlan(U.addDays(U.today(), 1));
 
@@ -121,7 +121,7 @@
           <div class="card__head">
             <div>
               <h2 class="card__title">${I.get('scale', 18)} Yang Harus Disiapkan</h2>
-              <p class="card__sub">Jumlah porsi dari seluruh pre-order</p>
+              <p class="card__sub">Jumlah pcs dari seluruh pre-order</p>
             </div>
           </div>
           <div class="grid grid--1-1">

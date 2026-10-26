@@ -2198,3 +2198,104 @@ kbd {
   .potensi { gap: 10px; }
   .potensi__note { min-width: 100%; text-align: left; }
 }
+
+/* ===== Porsi: 1 porsi berisi beberapa pcs ===== */
+
+/* Keterangan pada kartu menu di Kasir */
+.prod__price small { font-weight: 600; font-size: .68rem; color: var(--text-3); }
+.prod__porsi {
+  display: inline-flex; align-items: center; margin-top: 4px;
+  padding: 2px 7px; border-radius: var(--r-full);
+  background: var(--primary-soft); color: var(--primary);
+  font-size: .67rem; font-weight: 800; letter-spacing: .01em;
+}
+
+/* Bacaan porsi pada baris pesanan */
+.cart-item__porsi {
+  display: flex; align-items: center; gap: 4px; margin-top: 2px;
+  font-size: .72rem; color: var(--primary); font-weight: 600;
+}
+.cart-item__porsi b { font-weight: 800; }
+.cart-item__porsi span { color: var(--text-3); font-weight: 500; }
+
+/* Tombol cepat 1 / 5 / 10 porsi */
+.porsi-quick { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.cart-item__tools { gap: 2px; }
+.cart-item__controls { gap: 3px; }
+.chip--porsi {
+  padding: 3px 8px; justify-content: center; gap: 2px;
+  background: var(--surface-3); border-color: transparent;
+  font-size: .7rem; font-weight: 800; white-space: nowrap; letter-spacing: -.01em;
+}
+.chip--porsi.is-active {
+  background: var(--primary); border-color: var(--primary); color: var(--primary-contrast);
+}
+/* Pena kecil di dalam angka stepper: penanda bahwa angkanya bisa diketuk
+   untuk mengetik jumlah persis (2 porsi, 7 porsi, 3 pcs, dan seterusnya). */
+.stepper__pen { opacity: .5; margin-left: 1px; vertical-align: -1px; }
+.stepper__val--btn:hover .stepper__pen { opacity: 1; }
+
+/* Satuan di bawah stepper, supaya angkanya tidak salah dibaca sebagai porsi */
+.stepper__unit {
+  font-size: .62rem; font-weight: 800; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: .04em; line-height: 1;
+}
+
+/* Angka pada stepper bisa diketuk untuk mengetik jumlah persis */
+.stepper__val--btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 1px;
+  border: none; background: transparent; cursor: pointer; padding: 2px 5px;
+  border-radius: var(--r-sm); color: inherit; font: inherit;
+  font-weight: 800; font-size: .92rem; min-width: 34px;
+}
+.stepper__val--btn:hover { background: var(--surface); color: var(--primary); }
+
+/* Stepper lebar dengan kolom angka — dipakai di jendela "Atur Jumlah" */
+.stepper--wide { display: flex; width: 100%; gap: 8px; padding: 0; background: transparent; }
+.stepper--wide .stepper__btn { width: 42px; height: 42px; flex: none; border: 1px solid var(--border); }
+.field .stepper--wide input[type="number"].stepper__input {
+  flex: 1; min-width: 0; text-align: center;
+  font-weight: 800; font-size: 1.1rem; -moz-appearance: textfield;
+}
+.stepper__input::-webkit-outer-spin-button,
+.stepper__input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+.qty-preview {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 12px; border-radius: var(--r); background: var(--primary-soft);
+}
+.qty-preview__main { font-weight: 800; font-size: 1.02rem; color: var(--primary); }
+.qty-preview__sub { font-size: .76rem; color: var(--text-3); }
+.qty-preview__total { font-size: 1.15rem; font-weight: 800; color: var(--text); }
+
+/* Kolom "isi per porsi" pada form menu */
+.porsi-field { display: flex; align-items: center; gap: 10px; }
+.field .porsi-field input[type="number"] {
+  width: 110px; flex: none; text-align: center; font-weight: 800; font-size: 1.05rem;
+}
+.porsi-field__unit { font-size: .84rem; color: var(--text-3); font-weight: 700; white-space: nowrap; }
+
+@media (max-width: 640px) {
+  .chip--porsi { padding: 4px 10px; font-size: .74rem; }
+}
+
+.menu-card__price small { font-weight: 600; font-size: .7rem; color: var(--text-3); }
+.menu-card__porsi {
+  display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: var(--r-full);
+  background: var(--primary-soft); color: var(--primary);
+  font-size: .66rem; font-weight: 800; vertical-align: middle;
+}
+.stock-row__porsi { font-size: .68rem; font-weight: 700; color: var(--primary); }
+.stock-preview__row b small { font-weight: 700; font-size: .72rem; opacity: .8; }
+.po-pick__name small { display: block; font-size: .64rem; font-weight: 700; color: var(--primary); }
+
+/* Tombol tambah stok cepat tidak boleh terpotong jadi dua baris */
+.stock-row__quick .chip--mini { white-space: nowrap; }
+/* Di layar sempit tombolnya sudah memenuhi baris; keterangannya disembunyikan
+   supaya tidak pecah jadi tiga baris. Barisnya tetap bisa diketuk. */
+@media (max-width: 640px) { .stock-row__hint { display: none; } }
+
+/* Baris pre-order: tombol porsi turun ke baris sendiri selebar kartunya,
+   supaya tidak pecah jadi dua baris di layar sempit. */
+.po-item { flex-wrap: wrap; }
+.porsi-quick--full { flex: 1 0 100%; margin-top: 4px; }

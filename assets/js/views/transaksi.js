@@ -199,7 +199,7 @@
                 <div class="trx-group__title">
                   <h3>${U.formatDateRelative(date)}</h3>
                   ${dayIncomes.length ? `<span class="trx-group__customers">
-                    ${I.get('users', 13)} ${dayIncomes.length} pelanggan${dPorsi ? ` • ${U.number(dPorsi)} porsi` : ''}
+                    ${I.get('users', 13)} ${dayIncomes.length} pelanggan${dPorsi ? ` • ${U.number(dPorsi)} pcs` : ''}
                   </span>` : ''}
                 </div>
                 <div class="trx-group__totals">
