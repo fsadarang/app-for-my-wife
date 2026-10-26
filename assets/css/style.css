@@ -2219,9 +2219,15 @@ kbd {
 .cart-item__porsi span { color: var(--text-3); font-weight: 500; }
 
 /* Tombol cepat 1 / 5 / 10 porsi */
-.porsi-quick { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-.cart-item__tools { gap: 2px; }
-.cart-item__controls { gap: 3px; }
+.porsi-quick { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+
+/* Satu baris pesanan dibagi tiga lajur bertumpuk: keterangan di atas,
+   lalu stepper, lalu tombol cepat dan perkakas. Dengan dua stepper
+   (porsi dan pcs) semuanya tidak lagi muat berdampingan di layar HP. */
+.cart-item { flex-wrap: wrap; row-gap: 8px; }
+.cart-item__steppers,
+.cart-item__actions { display: flex; align-items: center; flex: 1 0 100%; gap: 8px; flex-wrap: wrap; }
+.cart-item__actions .spacer { flex: 1; }
 .chip--porsi {
   padding: 3px 8px; justify-content: center; gap: 2px;
   background: var(--surface-3); border-color: transparent;
@@ -2235,11 +2241,17 @@ kbd {
 .stepper__pen { opacity: .5; margin-left: 1px; vertical-align: -1px; }
 .stepper__val--btn:hover .stepper__pen { opacity: 1; }
 
-/* Satuan di bawah stepper, supaya angkanya tidak salah dibaca sebagai porsi */
-.stepper__unit {
+/* Satuan ditulis menempel pada angkanya, di dalam stepper, supaya tiap
+   stepper jelas menghitung apa — porsi atau pcs. */
+.stepper__val--btn small {
   font-size: .62rem; font-weight: 800; color: var(--text-3);
-  text-transform: uppercase; letter-spacing: .04em; line-height: 1;
+  text-transform: uppercase; letter-spacing: .02em; margin-left: 2px;
 }
+.stepper--porsi { background: var(--primary-soft); }
+.stepper--porsi .stepper__val--btn { color: var(--primary); }
+.stepper--porsi .stepper__val--btn small { color: var(--primary); opacity: .75; }
+.stepper__btn[disabled] { opacity: .35; cursor: not-allowed; box-shadow: none; }
+.stepper__btn[disabled]:hover { background: var(--surface); color: var(--text); }
 
 /* Angka pada stepper bisa diketuk untuk mengetik jumlah persis */
 .stepper__val--btn {
@@ -2299,3 +2311,10 @@ kbd {
    supaya tidak pecah jadi dua baris di layar sempit. */
 .po-item { flex-wrap: wrap; }
 .porsi-quick--full { flex: 1 0 100%; margin-top: 4px; }
+.po-item__steppers { display: flex; align-items: center; flex: 1 0 100%; gap: 8px; flex-wrap: wrap; }
+.stepper--sm .stepper__val small {
+  font-size: .6rem; font-weight: 800; color: var(--text-3);
+  text-transform: uppercase; margin-left: 2px;
+}
+.stepper--sm.stepper--porsi .stepper__val,
+.stepper--sm.stepper--porsi .stepper__val small { color: var(--primary); }

@@ -1209,12 +1209,21 @@
                   <p class="po-item__price">${U.rupiah(it.price)} × ${U.number(it.qty)} pcs = <b>${U.rupiah(it.price * it.qty)}</b></p>
                   ${isi > 1 ? `<p class="cart-item__porsi">${I.get('package', 12)} <b>${U.escapeHtml(S.porsiText(it.qty, isi))}</b></p>` : ''}
                 </div>
-                <div class="stepper stepper--sm">
-                  <button type="button" class="stepper__btn" data-dec aria-label="Kurangi">${I.get('minus', 14)}</button>
-                  <span class="stepper__val">${U.number(it.qty)}</span>
-                  <button type="button" class="stepper__btn" data-inc aria-label="Tambah">${I.get('plus', 14)}</button>
-                </div>
                 <button type="button" class="icon-btn" data-del aria-label="Hapus">${I.get('trash', 15)}</button>
+                <div class="po-item__steppers">
+                  ${isi > 1 ? `
+                    <div class="stepper stepper--sm stepper--porsi">
+                      <button type="button" class="stepper__btn" data-porsi-dec
+                              ${it.qty - isi < 1 ? 'disabled' : ''} aria-label="Kurangi satu porsi">${I.get('minus', 14)}</button>
+                      <span class="stepper__val">${U.number(Math.floor(it.qty / isi))}<small>porsi</small></span>
+                      <button type="button" class="stepper__btn" data-porsi-inc aria-label="Tambah satu porsi">${I.get('plus', 14)}</button>
+                    </div>` : ''}
+                  <div class="stepper stepper--sm">
+                    <button type="button" class="stepper__btn" data-dec aria-label="Kurangi satu pcs">${I.get('minus', 14)}</button>
+                    <span class="stepper__val">${U.number(it.qty)}<small>pcs</small></span>
+                    <button type="button" class="stepper__btn" data-inc aria-label="Tambah satu pcs">${I.get('plus', 14)}</button>
+                  </div>
+                </div>
                 <div class="porsi-quick porsi-quick--full">
                   ${PORSI_CEPAT.map(n => `
                     <button type="button" class="chip chip--porsi${it.qty === n * isi ? ' is-active' : ''}"
@@ -1236,6 +1245,23 @@
               renderItems(); renderPicker();
             });
             node.querySelector('[data-del]').addEventListener('click', () => { items.splice(i, 1); renderItems(); renderPicker(); });
+
+            // Naik-turun satu porsi penuh; sisa pcs yang tidak genap
+            // dibiarkan apa adanya. Tombol kurang mati kalau hasilnya
+            // akan kurang dari 1 pcs, supaya barisnya tidak terhapus.
+            const poDec = node.querySelector('[data-porsi-dec]');
+            if (poDec) poDec.addEventListener('click', () => {
+              const n = S.isiPorsi(items[i]);
+              if (items[i].qty - n < 1) return;
+              items[i].qty -= n;
+              renderItems(); renderPicker();
+            });
+            const poInc = node.querySelector('[data-porsi-inc]');
+            if (poInc) poInc.addEventListener('click', () => {
+              items[i].qty += S.isiPorsi(items[i]);
+              renderItems(); renderPicker();
+            });
+
             node.querySelectorAll('[data-porsi]').forEach(chip => {
               chip.addEventListener('click', () => {
                 const n = Number(chip.dataset.porsi) || 1;
