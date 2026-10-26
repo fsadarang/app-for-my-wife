@@ -381,26 +381,39 @@
           <p class="cart-item__price">${U.rupiah(it.price)} × ${U.number(it.qty)} pcs = <b>${U.rupiah(it.price * it.qty)}</b></p>
           ${isi > 1 ? `<p class="cart-item__porsi">${I.get('package', 12)} <b>${U.escapeHtml(S.porsiText(it.qty, isi))}</b> <span>· 1 porsi = ${U.number(isi)} pcs</span></p>` : ''}
           ${it.note ? `<p class="cart-item__note">${I.get('note', 12)} ${U.escapeHtml(it.note)}</p>` : ''}
+        </div>
+
+        <div class="cart-item__steppers">
+          ${isi > 1 ? `
+            <div class="stepper stepper--porsi">
+              <button type="button" class="stepper__btn" data-porsi-dec
+                      ${it.qty - isi < 1 ? 'disabled' : ''}
+                      aria-label="Kurangi ${U.escapeHtml(it.name)} satu porsi">${I.get('minus', 15)}</button>
+              <button type="button" class="stepper__val stepper__val--btn" data-qty-edit
+                      aria-label="Atur jumlah ${U.escapeHtml(it.name)}" title="Ketuk untuk mengetik jumlah persis">
+                ${U.number(Math.floor(it.qty / isi))}<small>porsi</small></button>
+              <button type="button" class="stepper__btn" data-porsi-inc
+                      aria-label="Tambah ${U.escapeHtml(it.name)} satu porsi">${I.get('plus', 15)}</button>
+            </div>` : ''}
+          <div class="stepper">
+            <button type="button" class="stepper__btn" data-dec aria-label="Kurangi ${U.escapeHtml(it.name)} satu pcs">${I.get('minus', 15)}</button>
+            <button type="button" class="stepper__val stepper__val--btn" data-qty-edit
+                    aria-label="Atur jumlah ${U.escapeHtml(it.name)}" title="Ketuk untuk mengetik jumlah persis">
+              ${U.number(it.qty)}<small>pcs</small>${I.get('edit', 11, 'stepper__pen')}</button>
+            <button type="button" class="stepper__btn" data-inc aria-label="Tambah ${U.escapeHtml(it.name)} satu pcs">${I.get('plus', 15)}</button>
+          </div>
+        </div>
+
+        <div class="cart-item__actions">
           <div class="porsi-quick" data-porsi-quick>
             ${PORSI_CEPAT.map(n => `
               <button type="button" class="chip chip--porsi${it.qty === n * isi ? ' is-active' : ''}"
                       data-porsi="${n}">${n} ${satuan}</button>`).join('')}
           </div>
-        </div>
-        <div class="cart-item__controls">
-          <div class="stepper">
-            <button type="button" class="stepper__btn" data-dec aria-label="Kurangi ${U.escapeHtml(it.name)} satu pcs">${I.get('minus', 15)}</button>
-            <button type="button" class="stepper__val stepper__val--btn" data-qty-edit
-                    aria-label="Atur jumlah ${U.escapeHtml(it.name)}" title="Ketuk untuk mengetik jumlah persis">
-              ${U.number(it.qty)}${I.get('edit', 11, 'stepper__pen')}</button>
-            <button type="button" class="stepper__btn" data-inc aria-label="Tambah ${U.escapeHtml(it.name)} satu pcs">${I.get('plus', 15)}</button>
-          </div>
-          <span class="stepper__unit">pcs</span>
-          <div class="cart-item__tools">
-            <button type="button" class="cart-item__note-btn${it.note ? ' is-set' : ''}" data-note
-                    aria-label="Catatan untuk ${U.escapeHtml(it.name)}">${I.get('note', 14)} Catatan</button>
-            <button type="button" class="icon-btn cart-item__del" data-del aria-label="Hapus ${U.escapeHtml(it.name)}">${I.get('trash', 15)}</button>
-          </div>
+          <span class="spacer"></span>
+          <button type="button" class="cart-item__note-btn${it.note ? ' is-set' : ''}" data-note
+                  aria-label="Catatan untuk ${U.escapeHtml(it.name)}">${I.get('note', 14)} Catatan</button>
+          <button type="button" class="icon-btn cart-item__del" data-del aria-label="Hapus ${U.escapeHtml(it.name)}">${I.get('trash', 15)}</button>
         </div>
       </div>`;
     }).join('');
@@ -488,6 +501,31 @@
         cart.splice(i, 1); renderCart(root); renderGrid(root);
       });
       node.querySelector('[data-note]').addEventListener('click', () => itemNoteModal(root, i));
+
+      /**
+       * Stepper porsi: naik-turun satu porsi penuh.
+       *
+       * Sisa pcs yang tidak genap satu porsi dibiarkan apa adanya — kalau
+       * pesanannya "5 porsi + 2 biji", menambah satu porsi jadi "6 porsi
+       * + 2 biji", bukan menghapus dua biji itu diam-diam.
+       *
+       * Tombol kurang dimatikan kalau hasilnya akan kurang dari 1 pcs,
+       * supaya satu ketukan tidak menghapus barisnya tanpa sengaja.
+       */
+      const porsiDec = node.querySelector('[data-porsi-dec]');
+      if (porsiDec) porsiDec.addEventListener('click', () => {
+        const isi = S.isiPorsi(cart[i]);
+        if (cart[i].qty - isi < 1) return;
+        cart[i].qty -= isi;
+        renderCart(root); renderGrid(root);
+      });
+
+      const porsiInc = node.querySelector('[data-porsi-inc]');
+      if (porsiInc) porsiInc.addEventListener('click', () => {
+        cart[i].qty += S.isiPorsi(cart[i]);
+        if (cart[i].productId) warnIfOverStock(cart[i].productId, cart[i].qty);
+        renderCart(root); renderGrid(root);
+      });
 
       // Tombol porsi cepat: MENETAPKAN jumlahnya, bukan menambah. Ditekan
       // dua kali hasilnya tetap sama — tidak ada risiko kelebihan diam-diam.
