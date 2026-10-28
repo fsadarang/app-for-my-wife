@@ -154,6 +154,35 @@
     return simpanHasilAuth(d);
   }
 
+  /**
+   * Cocokkan kata sandi akun yang sedang masuk — tanpa menyentuh sesi.
+   *
+   * Dipakai sebagai kunci sebelum angka saldo kas boleh diubah. Kata
+   * sandinya dikirim langsung ke server Firebase dan TIDAK pernah
+   * disimpan di perangkat ini; token baru yang ikut terkirim balik
+   * sengaja dibuang supaya sesi yang sedang jalan tidak terganggu.
+   *
+   * Percobaan yang salah ikut terhitung di batas percobaan Firebase,
+   * jadi menebak-nebak kata sandi akan tertahan dengan sendirinya.
+   */
+  async function verifikasiKataSandi(password) {
+    if (!session || !session.email) {
+      const err = new Error('Belum masuk ke akun.');
+      err.kode = 'NO_SESSION';
+      throw err;
+    }
+    const d = await minta(AUTH_URL + 'signInWithPassword?key=' + CFG.apiKey,
+      { email: session.email, password: password, returnSecureToken: true });
+
+    // Kata sandi akun lain tidak boleh membuka kunci ini.
+    if (d.localId && d.localId !== session.uid) {
+      const err = new Error('Kata sandi itu milik akun lain.');
+      err.kode = 'WRONG_ACCOUNT';
+      throw err;
+    }
+    return true;
+  }
+
   async function resetPassword(email) {
     await minta(AUTH_URL + 'sendOobCode?key=' + CFG.apiKey,
       { requestType: 'PASSWORD_RESET', email: email });
@@ -405,7 +434,7 @@
 
   global.Cloud = {
     isConfigured, loadSession, currentUser, onAuthChanged,
-    signUp, signIn, signOut, resetPassword,
+    signUp, signIn, signOut, resetPassword, verifikasiKataSandi,
     tarik, dorong, tarikProfil, dorongProfil,
     isNetworkError, COLLECTION, KEY_OF, TOKEN_KEY
   };

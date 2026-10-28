@@ -472,7 +472,8 @@ kbd {
 .form { display: flex; flex-direction: column; gap: 15px; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field__label { font-size: .8rem; font-weight: 700; color: var(--text-2); }
-.field__hint { font-weight: 500; color: var(--text-3); }
+.field__hint { display: inline-flex; align-items: center; gap: 3px; font-weight: 500; color: var(--text-3); vertical-align: baseline; }
+.field__hint svg { flex: none; }
 .field__note { font-size: .76rem; color: var(--text-3); line-height: 1.4; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .field-row--emoji { grid-template-columns: auto 1fr; align-items: end; }
@@ -481,7 +482,8 @@ kbd {
 .field--inline { flex-direction: row; align-items: center; gap: 8px; }
 
 .field input[type="text"], .field input[type="date"], .field input[type="time"],
-.field input[type="number"], .field input[type="search"], .field textarea, .field select {
+.field input[type="number"], .field input[type="search"], .field input[type="password"],
+.field input[type="email"], .field input[type="tel"], .field textarea, .field select {
   width: 100%; padding: 11px 13px;
   border: 1px solid var(--border); border-radius: var(--r);
   background: var(--surface); font-size: .93rem;
