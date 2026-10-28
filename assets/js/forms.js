@@ -103,7 +103,17 @@
         value = chip.dataset[attr];
       });
     });
-    return { get: () => value, chips };
+    return {
+      get: () => value,
+      /** Pilih salah satu dari luar — dipakai saat pilihan lain disembunyikan */
+      set: v => {
+        const target = chips.find(c => c.dataset[attr] === v);
+        if (!target) return;
+        chips.forEach(c => c.classList.toggle('is-active', c === target));
+        value = v;
+      },
+      chips
+    };
   }
 
   /* ---------- Modal: Catat Pengeluaran ---------- */
@@ -667,6 +677,117 @@
   /* ---------- Modal: Sesuaikan Saldo Kas ---------- */
 
   /**
+   * Kunci kata sandi sebelum angka saldo kas boleh diubah.
+   *
+   * Yang dicocokkan adalah kata sandi akun yang sedang masuk, diperiksa
+   * langsung ke server. Kata sandinya tidak pernah disimpan di perangkat
+   * ini, dan tidak ada masa tenggang — tiap kali mau mengubah saldo,
+   * kata sandinya diminta lagi.
+   *
+   * Tanpa internet pemeriksaan tidak bisa dilakukan, jadi perubahannya
+   * ditahan. Kalau ditahan, paling-paling penyesuaiannya tertunda; kalau
+   * diloloskan, kuncinya bisa dilewati cukup dengan mematikan wifi.
+   *
+   * Ini pengaman terhadap orang yang memegang perangkatnya, bukan
+   * terhadap orang yang paham cara kerja browser.
+   */
+  function bukaKunciKas() {
+    const C = global.Cloud;
+    const akun = (C && C.isConfigured()) ? C.currentUser() : null;
+
+    // Belum masuk akun: tidak ada kata sandi yang bisa dicocokkan.
+    if (!akun) {
+      return global.UI.confirm({
+        title: 'Belum masuk ke akun',
+        message: 'Kunci kata sandi baru aktif setelah masuk ke akun, karena kata sandinya ' +
+          'dicocokkan ke akun itu. Sekarang saldo kas masih bisa diubah tanpa kata sandi. ' +
+          'Tetap lanjut mengubah saldo?',
+        confirmText: 'Lanjut tanpa kunci'
+      });
+    }
+
+    return new Promise(resolve => {
+      let lolos = false;
+
+      global.UI.modal({
+        title: 'Masukkan Kata Sandi',
+        subtitle: 'Kata sandi akun ' + akun.email,
+        icon: 'lock',
+        size: 'sm',
+        onClose: () => resolve(lolos),
+        body: `
+          <form class="form" id="kunciForm" novalidate>
+            <p class="form__hint">
+              ${I.get('info', 16)}
+              <span>Mengubah saldo kas ikut mengubah laporan uangmu, jadi dikunci dulu.
+              Kata sandinya <b>tidak disimpan</b> di perangkat ini.</span>
+            </p>
+            <label class="field">
+              <span class="field__label">Kata Sandi</span>
+              <div class="pass-input">
+                <input type="password" name="sandi" autocomplete="current-password"
+                       data-autofocus placeholder="••••••">
+                <button type="button" class="pass-input__eye" data-act="lihat"
+                        aria-label="Tampilkan kata sandi">${I.get('search', 16)}</button>
+              </div>
+            </label>
+            <div class="auth-msg" data-msg hidden></div>
+          </form>`,
+        footer: `<span class="spacer"></span>
+          <button type="button" class="btn btn--ghost" data-act="cancel">Batal</button>
+          <button type="submit" form="kunciForm" class="btn btn--primary" data-act="buka">
+            ${I.get('check', 18)} Buka Kunci
+          </button>`,
+        onMount: handle => {
+          const root = handle.root;
+          const form = root.querySelector('#kunciForm');
+          const sandi = form.sandi;
+          const pesan = root.querySelector('[data-msg]');
+          const tombol = root.querySelector('[data-act=buka]');
+
+          const tampilkan = (teks, baik) => {
+            pesan.hidden = false;
+            pesan.className = 'auth-msg' + (baik ? ' is-good' : ' is-bad');
+            pesan.textContent = teks;
+          };
+
+          root.querySelector('[data-act=lihat]').addEventListener('click', () => {
+            const buka = sandi.type === 'password';
+            sandi.type = buka ? 'text' : 'password';
+            sandi.focus();
+          });
+
+          root.querySelector('[data-act=cancel]').addEventListener('click', () => handle.close());
+
+          form.addEventListener('submit', async e => {
+            e.preventDefault();
+            const isi = sandi.value;
+            if (!isi) { tampilkan('Kata sandi belum diisi.'); sandi.focus(); return; }
+
+            tombol.disabled = true;
+            tampilkan('Memeriksa...', true);
+            try {
+              await C.verifikasiKataSandi(isi);
+              lolos = true;
+              handle.close();
+            } catch (err) {
+              // Isian dibiarkan apa adanya supaya tinggal diperbaiki,
+              // tidak perlu mengetik ulang dari nol.
+              tampilkan(C.isNetworkError(err)
+                ? 'Tidak ada internet. Kata sandi perlu diperiksa ke server dulu, ' +
+                  'jadi saldo kas belum bisa diubah sekarang.'
+                : (err && err.message) || 'Kata sandi salah.');
+              sandi.select();
+            } finally {
+              tombol.disabled = false;
+            }
+          });
+        }
+      });
+    });
+  }
+
+  /**
    * Saldo Kas bukan angka yang disimpan, melainkan hasil hitungan:
    *   Modal Awal + semua pemasukan − semua pengeluaran
    *
@@ -678,17 +799,24 @@
    *    Selisihnya dicatat sebagai transaksi, supaya laporan ikut benar.
    * 2. Angka Modal Awal-nya yang dulu salah ketik.
    *    Yang diperbaiki modal awalnya, dan laporan tidak perlu tersentuh.
+   *    Ini hanya berlaku untuk uang tunai — modal awal memang uang tunai.
    */
   function cashAdjustModal(onDone) {
-    const st = S.get();
-    const total = S.cashBalance();
-    const grup = S.balanceGrouped();
-    const tunai = grup.tunai;
-    const modalAwal = Number(st.profile.startingCash) || 0;
+    bukaKunciKas().then(boleh => { if (boleh) jendelaSesuaikanKas(onDone); });
+  }
 
-    // Yang bisa dihitung dengan tangan hanya uang tunai. QRIS, transfer,
-    // dan ojol ada di rekening atau masih ditahan, jadi penyesuaian di
-    // sini sengaja hanya menyasar uang tunai.
+  function jendelaSesuaikanKas(onDone) {
+    const grup = S.balanceGrouped();
+    const perCara = S.balanceByMethod();
+    const total = S.cashBalance();
+
+    // Tiap cara bayar bisa disesuaikan sendiri-sendiri: uang tunai dihitung
+    // dari laci, QRIS dan transfer dari mutasi rekening, ojol dari laporan
+    // aplikasinya. Angkanya datang dari tempat yang berbeda-beda, jadi
+    // selisihnya juga harus bisa ditutup satu per satu.
+    let caraAktif = 'tunai';
+    const cariCara = id => perCara.find(r => r.id === id) || perCara[0];
+
     const body = `
       <form class="form" id="cashForm" novalidate>
         <div class="kas-now">
@@ -715,25 +843,29 @@
           </div>
         </div>
 
+        <div class="field">
+          <span class="field__label">Saldo mana yang mau disesuaikan?</span>
+          <div class="chip-row" data-kas-cara>
+            ${perCara.map(r => `
+              <button type="button" class="chip chip--method${r.id === caraAktif ? ' is-active' : ''}"
+                      data-kas-cara-val="${r.id}">
+                <span class="chip__emoji">${r.emoji}</span>${U.escapeHtml(r.name)}
+              </button>`).join('')}
+          </div>
+        </div>
+
         <label class="field">
-          <span class="field__label">
-            ${I.get('banknote', 14)} Uang TUNAI yang benar-benar ada di laci sekarang
-          </span>
+          <span class="field__label" data-kas-label></span>
           <div class="amount-input">
             <span class="amount-input__prefix">Rp</span>
-            <input type="text" id="kasReal" inputmode="numeric" placeholder="0" data-autofocus
-                   value="${tunai.saldo ? U.number(tunai.saldo) : ''}">
+            <input type="text" id="kasReal" inputmode="numeric" placeholder="0" data-autofocus>
           </div>
-          <span class="field__note">
-            Tercatat ${U.rupiah(tunai.saldo)} — dari modal awal ${U.rupiah(tunai.modalAwal)}
-            + masuk ${U.rupiah(tunai.masuk)} − keluar ${U.rupiah(tunai.keluar)}.
-            Saldo QRIS, transfer, dan ojol tidak ikut disesuaikan di sini.
-          </span>
+          <span class="field__note" data-kas-note></span>
         </label>
 
         <div class="kas-diff" data-diff></div>
 
-        <div class="field">
+        <div class="field" data-cara-wrap>
           <span class="field__label">Selisihnya mau dicatat sebagai apa?</span>
           <div class="kas-cara" data-cara>
             <button type="button" class="kas-opt is-active" data-cara-val="transaksi">
@@ -752,7 +884,7 @@
 
     global.UI.modal({
       title: 'Sesuaikan Saldo Kas',
-      subtitle: 'Cocokkan dengan uang yang ada di tangan',
+      subtitle: 'Cocokkan dengan uang yang sebenarnya',
       icon: 'wallet',
       size: 'md',
       body: body,
@@ -767,17 +899,49 @@
         const input = root.querySelector('#kasReal');
         const diff = root.querySelector('[data-diff]');
         const simpan = root.querySelector('[data-act=simpan]');
+        const label = root.querySelector('[data-kas-label]');
+        const nota = root.querySelector('[data-kas-note]');
+        const caraWrap = root.querySelector('[data-cara-wrap]');
         U.attachThousand(input);
 
         const cara = bindChips(root, '[data-cara] .kas-opt', 'caraVal');
 
-        const selisih = () => U.parseNumber(input.value) - tunai.saldo;
+        const baris = () => cariCara(caraAktif);
+        const selisih = () => U.parseNumber(input.value) - baris().saldo;
+
+        /** Tiap cara bayar punya kalimat sendiri — sumber angkanya beda */
+        const PENJELASAN = {
+          tunai: { ikon: 'banknote', apa: 'Uang TUNAI yang benar-benar ada di laci sekarang' },
+          qris: { ikon: 'qr', apa: 'Saldo QRIS menurut catatan aplikasi/rekeningmu' },
+          transfer: { ikon: 'creditCard', apa: 'Saldo TRANSFER menurut mutasi rekeningmu' },
+          ojol: { ikon: 'package', apa: 'Saldo OJOL / ONLINE menurut laporan aplikasinya' }
+        };
+
+        function gambarKolom() {
+          const r = baris();
+          const p = PENJELASAN[r.id] || { ikon: 'wallet', apa: 'Saldo ' + r.name + ' yang sebenarnya' };
+          label.innerHTML = `${I.get(p.ikon, 14)} ${U.escapeHtml(p.apa)}`;
+          input.value = r.saldo ? U.number(r.saldo) : '';
+          nota.innerHTML =
+            `Tercatat ${U.rupiah(r.saldo)} — dari ` +
+            (r.modalAwal ? `modal awal ${U.rupiah(r.modalAwal)} + ` : '') +
+            `masuk ${U.rupiah(r.masuk)} − keluar ${U.rupiah(r.keluar)}. ` +
+            `Saldo cara bayar lain tidak ikut berubah.`;
+
+          // "Modal awal saya yang salah" hanya masuk akal untuk uang tunai:
+          // modal awal usaha memang uang tunai, bukan saldo QRIS atau ojol.
+          const bolehModal = r.id === 'tunai';
+          caraWrap.hidden = !bolehModal;
+          if (!bolehModal) cara.set('transaksi');
+          gambarSelisih();
+        }
 
         function gambarSelisih() {
+          const r = baris();
           const d = selisih();
           if (!d) {
             diff.className = 'kas-diff is-sama';
-            diff.innerHTML = `${I.get('check', 16)} Uang tunai sudah cocok — tidak ada yang perlu disesuaikan.`;
+            diff.innerHTML = `${I.get('check', 16)} Saldo ${U.escapeHtml(r.name)} sudah cocok — tidak ada yang perlu disesuaikan.`;
             simpan.disabled = true;
             return;
           }
@@ -785,13 +949,23 @@
           diff.className = 'kas-diff ' + (lebih ? 'is-lebih' : 'is-kurang');
           diff.innerHTML = `
             ${I.get(lebih ? 'trendUp' : 'trendDown', 16)}
-            <span>Uang tunai di laci <b>${lebih ? 'lebih' : 'kurang'} ${U.rupiah(Math.abs(d))}</b>
+            <span>Saldo ${U.escapeHtml(r.name)} <b>${lebih ? 'lebih' : 'kurang'} ${U.rupiah(Math.abs(d))}</b>
             dari yang tercatat. Total seluruh saldo akan jadi ${U.rupiah(total + d)}.</span>`;
           simpan.disabled = false;
         }
 
+        root.querySelectorAll('[data-kas-cara-val]').forEach(chip => {
+          chip.addEventListener('click', () => {
+            caraAktif = chip.dataset.kasCaraVal;
+            root.querySelectorAll('[data-kas-cara-val]').forEach(b =>
+              b.classList.toggle('is-active', b === chip));
+            gambarKolom();
+            input.focus();
+          });
+        });
+
         input.addEventListener('input', gambarSelisih);
-        gambarSelisih();
+        gambarKolom();
 
         root.querySelector('[data-act=cancel]').addEventListener('click', () => handle.close());
 
@@ -799,11 +973,13 @@
           e.preventDefault();
           const d = selisih();
           if (!d) return;
+          const r = baris();
           const target = U.parseNumber(input.value);
 
-          if (cara.get() === 'modal') {
+          if (r.id === 'tunai' && cara.get() === 'modal') {
             // Modal awal memang uang tunai, jadi menggesernya sebesar
             // selisih akan membuat saldo tunai pas.
+            const modalAwal = Number(S.get().profile.startingCash) || 0;
             S.updateProfile({ startingCash: Math.max(0, modalAwal + d) });
             handle.close();
             global.UI.toast(`Modal awal diperbaiki. Uang tunai sekarang tercatat ${U.rupiah(target)}.`, 'success', 6000);
@@ -814,20 +990,20 @@
           // Ditandai sebagai penyesuaian: ikut menghitung saldo kas, tapi
           // TIDAK ikut di laporan untung-rugi. Tanpa penanda ini, sekali
           // penyesuaian besar bisa membuat satu hari terlihat rugi jutaan.
-          const catatan = 'Penyesuaian saldo tunai';
+          const catatan = 'Penyesuaian saldo ' + r.name;
           if (d > 0) {
-            S.addIncome({ total: d, customerName: '', note: catatan, method: 'tunai', adjustment: true });
+            S.addIncome({ total: d, customerName: '', note: catatan, method: r.id, adjustment: true });
           } else {
             const kategori = S.get().expenseCategories.find(c => c.id === 'cat_lain') ||
               S.get().expenseCategories[0];
             S.addExpense({
               total: Math.abs(d), categoryId: kategori && kategori.id,
-              note: catatan, method: 'tunai', adjustment: true
+              note: catatan, method: r.id, adjustment: true
             });
           }
           handle.close();
           global.UI.toast(
-            `Uang tunai sekarang tercatat ${U.rupiah(target)}. ` +
+            `Saldo ${r.name} sekarang tercatat ${U.rupiah(target)}. ` +
             `Selisih ${U.rupiah(Math.abs(d))} tidak dihitung sebagai ` +
             `${d > 0 ? 'penjualan' : 'pengeluaran'} di Laporan.`, 'success', 8000);
           if (onDone) onDone();
@@ -1525,7 +1701,7 @@
   global.Forms = {
     expenseModal, quickIncomeModal, incomeDetailModal,
     productModal, categoryModal, receiptModal, preorderModal, completePreorderModal, stockModal,
-    cashAdjustModal,
+    cashAdjustModal, bukaKunciKas,
     bindAmount, bindChips, amountField, dateTimeFields, methodChips, noteField
   };
 })(window);

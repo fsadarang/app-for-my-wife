@@ -170,7 +170,10 @@
                        value="${p.dailyTarget ? U.number(p.dailyTarget) : ''}"></div>
             </label>
             <label class="field">
-              <span class="field__label">Modal Awal / Kas Awal</span>
+              <span class="field__label">
+                Modal Awal / Kas Awal
+                <span class="field__hint">${I.get('lock', 12)} perlu kata sandi</span>
+              </span>
               <div class="amount-input"><span class="amount-input__prefix">Rp</span>
                 <input type="text" id="setCash" inputmode="numeric" placeholder="0"
                        value="${p.startingCash ? U.number(p.startingCash) : ''}"></div>
@@ -334,7 +337,7 @@
         </div>
       </section>
 
-      <p class="app-version">Dapur Kita • <b>versi 2.7</b> • dibuat dengan ❤️ untuk usaha makanan rumahan</p>`;
+      <p class="app-version">Dapur Kita • <b>versi 2.8</b> • dibuat dengan ❤️ untuk usaha makanan rumahan</p>`;
 
     bind(root);
   }
@@ -346,17 +349,35 @@
     U.attachThousand(targetInput);
     U.attachThousand(cashInput);
 
-    root.querySelector('#profileForm').addEventListener('submit', e => {
+    root.querySelector('#profileForm').addEventListener('submit', async e => {
       e.preventDefault();
       const f = e.target;
-      S.updateProfile({
-        businessName: f.businessName.value.trim(),
-        ownerName: f.ownerName.value.trim(),
-        dailyTarget: U.parseNumber(targetInput.value),
-        startingCash: U.parseNumber(cashInput.value)
-      });
-      UI.toast('Profil usaha disimpan', 'success');
-      global.App.refreshShell();
+      const modalBaru = U.parseNumber(cashInput.value);
+      const modalLama = Number(S.get().profile.startingCash) || 0;
+
+      const simpan = patch => {
+        S.updateProfile(Object.assign({
+          businessName: f.businessName.value.trim(),
+          ownerName: f.ownerName.value.trim(),
+          dailyTarget: U.parseNumber(targetInput.value)
+        }, patch));
+        UI.toast('Profil usaha disimpan', 'success');
+        global.App.refreshShell();
+      };
+
+      // Modal awal ikut menentukan Saldo Kas, jadi mengubahnya di sini
+      // sama saja dengan mengubah saldo. Tanpa kunci yang sama, orang
+      // tinggal lewat halaman ini untuk menghindari kata sandi.
+      if (modalBaru !== modalLama) {
+        const boleh = await global.Forms.bukaKunciKas();
+        if (!boleh) {
+          cashInput.value = modalLama ? U.number(modalLama) : '';
+          UI.toast('Modal awal tidak jadi diubah. Perubahan lain tetap disimpan.', 'info', 6000);
+          simpan({});
+          return;
+        }
+      }
+      simpan({ startingCash: modalBaru });
     });
 
     /* --- Logo usaha --- */
